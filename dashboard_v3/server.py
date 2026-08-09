@@ -252,6 +252,38 @@ async def download_failed():
         return {"error": "File not found"}
     return FileResponse(FAILED_CSV, media_type='text/csv', filename="failed_links.csv")
 
+# ─── Links API ───────────────────────────────────────────────────────────────
+@app.get("/api/links")
+async def get_links():
+    """Return all extracted links from extracted_links.csv"""
+    links = []
+    if os.path.exists(SUCCESS_CSV):
+        try:
+            with open(SUCCESS_CSV, "r") as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    if len(row) >= 4 and row[3]:
+                        links.append({"phone": row[2], "link": row[3], "status": row[4] if len(row) > 4 else "unknown"})
+        except Exception:
+            pass
+    return JSONResponse({"links": links, "count": len(links)})
+
+@app.get("/api/checked-links")
+async def get_checked_links():
+    """Return all checked links"""
+    links = []
+    checked_csv = os.path.join(DATA_DIR, "checked_links.csv")
+    if os.path.exists(checked_csv):
+        try:
+            with open(checked_csv, "r") as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    if len(row) >= 2:
+                        links.append({"link": row[0], "status": row[1] if len(row) > 1 else "unknown"})
+        except Exception:
+            pass
+    return JSONResponse({"links": links, "count": len(links)})
+
 # ─── Retry OTP Timeouts ──────────────────────────────────────────────────────
 @app.post("/api/retry_otp_timeouts")
 async def retry_otp_timeouts():
@@ -1865,6 +1897,20 @@ async def process_firebase_number(device_id, phone, fb_url, speed_delay, attempt
             order_event(order, "✅ Link extracted & saved to CSV/links.txt!")
             await emit_order(order)
             await emit_log(f"🎉 [{phone}] Gemini Link Saved (API)! ", "success")
+
+            # Emit link_saved so frontend Links tab updates in real-time
+            link_count = 0
+            if os.path.exists(SUCCESS_CSV):
+                try:
+                    with open(SUCCESS_CSV, "r") as f:
+                        link_count = sum(1 for _ in csv.reader(f))
+                except Exception:
+                    pass
+            await sio.emit("link_saved", {
+                "phone": "+91" + clean_phone,
+                "link": target_link,
+                "count": link_count
+            })
             return
 
     except RetryableJioError as e:
