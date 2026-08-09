@@ -1072,7 +1072,6 @@ async def _handle_jio_number_impl(order):
                     target_link = next((url for url in captured_url if "serviceactivation.google.com" in url), captured_url[0])
 
                     # Persist to config["saved_links"]
-                    global config
                     _sl = config.get("saved_links", [])
                     if target_link not in _sl:
                         _sl.append(target_link)
@@ -1944,7 +1943,6 @@ async def process_firebase_number(device_id, phone, fb_url, speed_delay, attempt
 
             # Success!
             # Persist link to config["saved_links"] — survives Railway restarts/redeploys
-            global config
             saved_links = config.get("saved_links", [])
             if target_link not in saved_links:
                 saved_links.append(target_link)
