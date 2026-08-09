@@ -36,8 +36,9 @@ PROJECT_DIR = os.path.dirname(BASE_DIR)
 # DATA_DIR can be overridden via env var for persistent volumes (e.g. Railway Volume at /data)
 DATA_DIR = os.environ.get("DATA_DIR", os.path.join(PROJECT_DIR, "data"))
 PROFILES_DIR = os.path.join(DATA_DIR, "profiles")
-CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
-ANALYTICS_FILE = os.path.join(BASE_DIR, "analytics.json")
+# CONFIG_FILE stored in DATA_DIR so it persists on Railway Volume
+CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
+ANALYTICS_FILE = os.path.join(DATA_DIR, "analytics.json")
 SPEED_MAP = {"slow": 2.0, "normal": 1.0, "fast": 0.3}
 ANALYTICS_MAX_AGE_DAYS = 7
 PROXIES_FILE = os.path.join(DATA_DIR, "proxies.txt")
@@ -327,6 +328,40 @@ async def check_proxies(request: Request):
 
     results = await asyncio.gather(*[check_one(p) for p in proxies])
     return JSONResponse({"results": list(results), "count": len(results)})
+
+@app.post("/api/delete-link")
+async def delete_link(request: Request):
+    """Delete a single link from persistent store."""
+    global config
+    body = await request.json()
+    link = body.get("link", "").strip()
+    list_name = body.get("list", "saved")
+    if not link:
+        return JSONResponse({"ok": False, "deleted": 0})
+    try:
+        if list_name == "checked":
+            checked_csv = os.path.join(DATA_DIR, "checked_links.csv")
+            if os.path.exists(checked_csv):
+                rows = []
+                with open(checked_csv, "r") as f:
+                    rows = [r for r in csv.reader(f) if r and r[0] != link]
+                with open(checked_csv, "w", newline="") as f:
+                    csv.writer(f).writerows(rows)
+        else:
+            saved = config.get("saved_links", [])
+            new_saved = [l for l in saved if l != link]
+            config["saved_links"] = new_saved
+            save_config(config)
+            # Also remove from CSV
+            if os.path.exists(SUCCESS_CSV):
+                rows = []
+                with open(SUCCESS_CSV, "r") as f:
+                    rows = [r for r in csv.reader(f) if not (len(r) >= 4 and r[3] == link)]
+                with open(SUCCESS_CSV, "w", newline="") as f:
+                    csv.writer(f).writerows(rows)
+        return JSONResponse({"ok": True, "deleted": 1})
+    except Exception as e:
+        return JSONResponse({"ok": False, "deleted": 0, "error": str(e)})
 
 @app.get("/api/checked-links")
 async def get_checked_links():
