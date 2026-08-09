@@ -263,7 +263,7 @@ async def get_links():
                 reader = csv.reader(f)
                 for row in reader:
                     if len(row) >= 4 and row[3]:
-                        links.append({"phone": row[2], "link": row[3], "status": row[4] if len(row) > 4 else "unknown"})
+                        links.append(row[3])  # return link string only, matching frontend expectation
         except Exception:
             pass
     return JSONResponse({"links": links, "count": len(links)})
