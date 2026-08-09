@@ -97,6 +97,7 @@ DEFAULT_CONFIG = {
         }
     },
     "firebase_urls": [u.strip() for u in os.environ.get("FIREBASE_URLS", "").split(",") if u.strip()],
+    "proxies": [u.strip() for u in os.environ.get("PROXY_URLS", "").split(",") if u.strip()],
     "firebase_dbs": [],
     "saved_links": [],
     "otpsms_servers": ["1", "2", "5", "6", "7", "8", "9", "11", "12", "13", "33", "36", "71", "234", "458", "2344", "4566", "64653"],
@@ -150,6 +151,11 @@ def load_config():
                 # Keep saved_links from saved config (persists across restarts)
                 if "saved_links" not in merged:
                     merged["saved_links"] = []
+                # Always prefer PROXY_URLS env var over saved config
+                if DEFAULT_CONFIG["proxies"]:
+                    merged["proxies"] = DEFAULT_CONFIG["proxies"]
+                elif "proxies" not in merged:
+                    merged["proxies"] = []
                 return merged
         except:
             pass
