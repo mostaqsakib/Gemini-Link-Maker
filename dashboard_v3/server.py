@@ -2875,4 +2875,5 @@ async def process_chatgpt_login(sid, num_tabs):
 # ─── Main ─────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     print("🚀 Jio Sniper Dashboard v2.0 — http://localhost:8000")
-    uvicorn.run(sio_app, host="0.0.0.0", port=8000, log_level="warning")
+    port = int(os.environ.get("PORT", 8000))
+uvicorn.run(sio_app, host="0.0.0.0", port=port, log_level="warning")
