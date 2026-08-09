@@ -294,6 +294,35 @@ async def clear_links():
         return JSONResponse({"ok": False, "error": str(e)})
     return JSONResponse({"ok": True, "cleared": cleared})
 
+@app.get("/api/proxies")
+async def get_proxies():
+    """Return saved proxies from config."""
+    proxies = config.get("proxies", [])
+    return JSONResponse({"proxies": proxies, "count": len(proxies)})
+
+@app.post("/api/proxy-check")
+async def check_proxies(request: Request):
+    """Check latency of each proxy by making a test request."""
+    body = await request.json()
+    proxies = body.get("proxies", [])
+    results = []
+    test_url = "https://www.google.com"
+    async def check_one(proxy):
+        import time as _time
+        start = _time.time()
+        try:
+            async with aiohttp.ClientSession() as sess:
+                async with sess.get(test_url, proxy=proxy, timeout=8, allow_redirects=True) as resp:
+                    latency = round((_time.time() - start) * 1000)
+                    return {"proxy": proxy, "ok": resp.status < 400, "status": str(resp.status), "latency_ms": latency}
+        except Exception as e:
+            return {"proxy": proxy, "ok": False, "status": str(e)[:60], "latency_ms": None}
+    if not state.http_session:
+        state.http_session = aiohttp.ClientSession()
+    tasks = [check_one(p) for p in proxies if p.strip()]
+    results = await asyncio.gather(*tasks)
+    return JSONResponse({"results": list(results), "count": len(results)})
+
 @app.get("/api/checked-links")
 async def get_checked_links():
     """Return all checked links"""
