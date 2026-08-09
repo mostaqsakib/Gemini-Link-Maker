@@ -5,3 +5,4 @@ aiohttp
 python-dotenv
 psutil
 playwright
+python-multipart
