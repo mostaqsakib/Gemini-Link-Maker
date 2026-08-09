@@ -1,0 +1,24 @@
+.env
+venv/
+venv*/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.txt
+*.csv
+*.log
+profiles/
+.DS_Store
+**/.DS_Store
+dashboard/config.json
+dashboard/analytics.json
+dashboard_v3/config.json
+dashboard_v3/analytics.json
+dashboard_v3/venv2/
+*.json
+data/screenshots/
+data/
+FIREBASE APKs/
+*.apk
+*.session
+*.session-journal

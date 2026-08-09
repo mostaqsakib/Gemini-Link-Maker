@@ -1,0 +1,620 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luffy Prime Dashboard</title>
+    <meta name="description" content="Real-time Luffy Prime automation dashboard">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css?v=v3-scroll-shrink-fix-20260806">
+</head>
+
+<body>
+    <!-- Top Bar -->
+    <header class="top-bar">
+        <div class="top-bar-left">
+            <div class="logo"><img src="/static/luffy_prime_logo.jpg" alt="Luffy Prime"></div>
+            <h1>Luffy Prime</h1>
+            <span class="version">v3</span>
+        </div>
+        <div class="top-bar-center">
+            <!-- System Gauges -->
+            <div class="gauge-group">
+                <div class="gauge" id="cpuGauge" title="CPU Usage">
+                    <svg viewBox="0 0 36 36" class="gauge-svg">
+                        <path class="gauge-bg"
+                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                        <path class="gauge-fill gauge-fill-cpu" id="cpuFill" stroke-dasharray="0, 100"
+                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                    </svg>
+                    <div class="gauge-label">
+                        <span class="gauge-value" id="cpuValue">0</span>
+                        <span class="gauge-unit">% CPU</span>
+                    </div>
+                </div>
+                <div class="gauge" id="ramGauge" title="RAM Usage">
+                    <svg viewBox="0 0 36 36" class="gauge-svg">
+                        <path class="gauge-bg"
+                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                        <path class="gauge-fill gauge-fill-ram" id="ramFill" stroke-dasharray="0, 100"
+                            d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                    </svg>
+                    <div class="gauge-label">
+                        <span class="gauge-value" id="ramValue">0</span>
+                        <span class="gauge-unit">% RAM</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="top-bar-right">
+            <div class="status-indicator" id="connectionStatus">
+                <span class="dot dot-disconnected"></span>
+                <span>Disconnected</span>
+            </div>
+            <div class="stats-pill" id="totalStats">
+                <span class="stats-label">Total</span><span class="stats-value" id="statTotal">0</span>
+                <span class="stats-divider">|</span>
+                <span class="stats-label">Checked</span><span class="stats-value stats-jio" id="statChecked">0</span>
+                <span class="stats-divider">|</span>
+                <span class="stats-label">Left</span><span class="stats-value stats-otp" id="statLeft">0</span>
+            </div>
+            <a class="btn-telegram" href="https://t.me/Luffyprime7" target="_blank" rel="noopener noreferrer" title="Telegram">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21.7 4.3 18.4 20c-.2 1-.8 1.2-1.6.7l-5-3.7-2.4 2.3c-.3.3-.5.5-1 .5l.4-5.2 9.5-8.6c.4-.4-.1-.6-.6-.2L5.9 13.2.8 11.6c-1.1-.3-1.1-1.1.2-1.6L20.8 2.4c.9-.3 1.7.2.9 1.9z"/></svg>
+            </a>
+            <button class="btn-settings" id="openSettings" title="Settings">⚙️</button>
+        </div>
+    </header>
+
+    <main class="main-layout">
+        <!-- Left Panel -->
+        <aside class="left-panel">
+            <div class="panel-section">
+                <div class="section-header">
+                    <h2>OTP Providers</h2>
+                    <button class="btn-icon" id="refreshBalances" title="Refresh Balances">↻</button>
+                </div>
+                <div class="provider-list" id="providerList"></div>
+            </div>
+
+            <div class="panel-section">
+                <div class="section-header">
+                    <h2>Batch Control</h2>
+                </div>
+                <div class="batch-control">
+                    <label class="control-label">Browser Count</label>
+                    <div class="count-selector">
+                        <button class="count-btn" id="countDown">-</button>
+                        <span class="count-value" id="batchCount">1</span>
+                        <button class="count-btn" id="countUp">+</button>
+                    </div>
+                </div>
+                <div class="batch-control">
+                    <label class="control-label">Scan Mode</label>
+                    <div class="speed-selector">
+                        <button class="speed-btn scan-mode-btn" data-scan="normal" title="Online devices only">Normal</button>
+                        <button class="speed-btn scan-mode-btn active" data-scan="deep" title="Online + offline active in last 5 days">Deep</button>
+                        <button class="speed-btn scan-mode-btn" data-scan="deepest" title="Online + offline active in last 20 days">Deepest</button>
+                    </div>
+                </div>
+                <div class="batch-control">
+                    <label class="control-label">Headless Mode <span class="deep-scan-hint">(hidden browser)</span></label>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="headlessToggle" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="batch-control">
+                    <label class="control-label">OTP Delay <span class="deep-scan-hint">(seconds)</span></label>
+                    <div style="display: flex; align-items: center; gap: 10px; background: var(--bg-input); border-radius: 8px; padding: 4px;">
+                        <button class="count-btn" id="delayDown" style="flex:1;">-</button>
+                        <span id="otpDelayDisplay" style="font-size: 16px; font-weight: 600; width: 40px; text-align: center;">4</span>
+                        <button class="count-btn" id="delayUp" style="flex:1;">+</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel-section actions-section">
+                <button class="btn-primary btn-start" id="startBtn"><span class="btn-icon-left">🚀</span>
+                    Sniping</button>
+                <button class="btn-warning hidden" id="pauseBtn" style="background: #f59e0b; width: 100%; display: flex; justify-content: center; padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; color: #000;"><span
+                        class="btn-icon-left">⏸️</span> Pause</button>
+                <button class="btn-primary hidden" id="resumeBtn" style="background: #22c55e; width: 100%; display: flex; justify-content: center; padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; color: #fff;"><span
+                        class="btn-icon-left">▶️</span> Resume</button>
+                <div id="pauseBanner" class="hidden" style="background: #dc2626; color: white; padding: 8px 12px; border-radius: 8px; margin-top: 8px; font-size: 13px; text-align: center;"></div>
+                <button class="btn-warning btn-stop hidden" id="stopBtn" style="background: #f59e0b; margin-top: 10px;"><span
+                        class="btn-icon-left">■</span> Stop (Full Reset)</button>
+                <button class="btn-danger btn-stop hidden" id="forceStopBtn" style="margin-top: 10px;"><span
+                        class="btn-icon-left">🛑</span> Force Stop</button>
+                <button class="btn-danger" id="killZombieBtn"
+                    style="margin-top: 10px; width: 100%; display: flex; justify-content: center; background: #dc2626;"><span
+                        class="btn-icon-left">🧹</span> Kill Zombie Browsers</button>
+                <button class="btn-secondary" id="openEmailConverterModal"
+                    style="margin-top: 10px; width: 100%; display: flex; justify-content: center; background: #3b82f6; color: white; border: none;"><span
+                        class="btn-icon-left">📧</span> Convert Emails</button>
+                <button class="btn-secondary" id="openLinkCheckerModal"
+                    style="margin-top: 10px; width: 100%; display: flex; justify-content: center; background: #10b981; color: white; border: none;"><span
+                        class="btn-icon-left">🔗</span> Check Links</button>
+                <button class="btn-secondary" id="openApkExtractorModal"
+                    style="margin-top: 10px; width: 100%; display: flex; justify-content: center; background: #8b5cf6; color: white; border: none;"><span
+                        class="btn-icon-left">📱</span> APK / Link Extractor</button>
+                <button class="btn-secondary" id="retryOtpTimeoutsBtn"
+                    style="margin-top: 10px; width: 100%; display: flex; justify-content: center; background: #f97316; color: white; border: none;"><span
+                        class="btn-icon-left">🔁</span> Retry OTP Timeouts</button>
+            </div>
+
+        </aside>
+
+        <!-- Right Panel -->
+        <section class="right-panel">
+            <div class="right-panel-tabs">
+                <button class="tab-btn active" data-tab="orders">Active Orders <span class="order-count"
+                        id="orderCount">0</span></button>
+                <button class="tab-btn" data-tab="analytics">Analytics</button>
+                <button class="tab-btn" data-tab="display">Display</button>
+                <button class="tab-btn" data-tab="links">Links <span class="order-count" id="tabLinkCount">0</span></button>
+                <button class="tab-btn" data-tab="checked-links">Checked Links <span class="order-count" id="tabCheckedLinkCount">0</span></button>
+                <button class="tab-btn" data-tab="proxies">Proxies <span class="order-count" id="tabProxyCount">0</span></button>
+                <button class="btn-icon tab-refresh" id="refreshOrders" title="Refresh">↻</button>
+            </div>
+
+            <!-- Orders Tab -->
+            <div class="tab-content active" id="tab-orders">
+                <div class="orders-container" id="ordersContainer">
+                    <div class="empty-state">
+                        <div class="empty-icon">📡</div>
+                        <h3>No active numbers</h3>
+                        <p>Select providers and click "Start Sniping" to begin</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analytics Tab -->
+            <div class="tab-content" id="tab-analytics">
+                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <a href="/download/success" target="_blank" class="btn-primary"
+                        style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center; font-size: 13px;"><span
+                            class="btn-icon-left">⬇️</span> Download Extracted Links (Success)</a>
+                    <a href="/download/failed" target="_blank" class="btn-secondary"
+                        style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center; font-size: 13px;"><span
+                            class="btn-icon-left">⬇️</span> Download Failed Links</a>
+                </div>
+                <div class="analytics-grid">
+                    <div class="chart-card">
+                        <h3>Provider Performance</h3>
+                        <canvas id="providerChart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Success Rate Timeline (24h)</h3>
+                        <canvas id="timelineChart"></canvas>
+                    </div>
+                    <div class="chart-card chart-card-full">
+                        <h3>Cost per Login</h3>
+                        <div class="cost-table" id="costTable">
+                            <div class="cost-header">
+                                <span>Provider</span><span>Fetched</span><span>Jio</span><span>OTPs</span><span>Logins</span><span>Jio
+                                    %</span><span>OTP %</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Display Tab -->
+            <div class="tab-content" id="tab-display">
+                <div class="display-toolbar">
+                    <span id="displayCount">0 processes</span>
+                    <button class="btn-icon" id="refreshDisplay" title="Refresh">↻</button>
+                </div>
+                <div class="process-container" id="processContainer">
+                    <div class="empty-state">
+                        <div class="empty-icon">🖥️</div>
+                        <h3>No process activity</h3>
+                        <p>Live number steps will appear here</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Links Tab -->
+            <div class="tab-content" id="tab-links">
+                <div class="display-toolbar">
+                    <span>Saved Links: <strong id="linksTabCount">0</strong></span>
+                    <span class="link-check-summary">Live <strong class="count-live" id="linkCheckLive">0</strong> | Used <strong class="count-used" id="linkCheckUsed">0</strong> | Left <strong id="linkCheckLeft">0</strong></span>
+                    <div class="toolbar-actions">
+                        <button class="btn-secondary" id="copyAllSavedLinks">📋 Copy All</button>
+                        <button class="btn-secondary" id="checkAllSavedLinks">✅ Check All</button>
+                        <button class="btn-icon" id="refreshSavedLinks" title="Refresh">↻</button>
+                    </div>
+                </div>
+                <div class="links-container" id="savedLinksContainer">
+                    <div class="empty-state">
+                        <div class="empty-icon">🔗</div>
+                        <h3>No saved links</h3>
+                        <p>Extracted links will appear here</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Checked Links Tab -->
+            <div class="tab-content" id="tab-checked-links">
+                <div class="display-toolbar">
+                    <span>Valid Checked Links: <strong id="checkedLinksTabCount">0</strong></span>
+                    <span class="link-check-summary">Live <strong class="count-live" id="checkedLinkLive">0</strong> | Used <strong class="count-used" id="checkedLinkUsed">0</strong> | Left <strong id="checkedLinkLeft">0</strong></span>
+                    <div class="toolbar-actions">
+                        <button class="btn-secondary" id="copyAllCheckedLinks">📋 Copy All</button>
+                        <button class="btn-secondary" id="checkAllCheckedLinks">✅ Check All</button>
+                        <button class="btn-icon" id="refreshCheckedLinks" title="Refresh">↻</button>
+                    </div>
+                </div>
+                <div class="links-container" id="checkedLinksContainer">
+                    <div class="empty-state">
+                        <div class="empty-icon">✅</div>
+                        <h3>No checked links</h3>
+                        <p>Valid links will appear here after auto-check</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Proxies Tab -->
+            <div class="tab-content" id="tab-proxies">
+                <div class="display-toolbar">
+                    <span>Proxy Health: <strong id="proxyTabCount">0</strong> total | <strong id="proxyLiveCount">0</strong> live | Max <strong id="proxyLatencyLimit">2500</strong>ms</span>
+                    <div class="toolbar-actions">
+                        <button class="btn-secondary" id="checkAllProxies">🧪 Check All</button>
+                        <button class="btn-icon" id="refreshProxyList" title="Refresh">↻</button>
+                    </div>
+                </div>
+                <div class="links-container" id="proxyListContainer">
+                    <div class="empty-state">
+                        <div class="empty-icon">🧪</div>
+                        <h3>No proxies configured</h3>
+                        <p>Add proxies in Settings to check them here</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right API Panel -->
+        <aside class="api-sidebar">
+            <div class="panel-section">
+                <div class="section-header">
+                    <h2>Batch Progress</h2>
+                </div>
+                <div class="progress-stats" style="display: flex; flex-direction: column; gap: 8px; font-size: 13px;">
+                    <div style="display: flex; justify-content: space-between;"><span>Total Devices:</span> <span id="progTotal" style="font-weight: 600; color: var(--accent-blue);">0</span></div>
+                    <div style="display: flex; justify-content: space-between;"><span>Checked:</span> <span id="progChecked" style="font-weight: 600;">0</span></div>
+                    <div style="display: flex; justify-content: space-between;"><span>Remaining:</span> <span id="progRemaining" style="font-weight: 600;">0</span></div>
+                    <div style="display: flex; justify-content: space-between;"><span>Speed (TPM):</span> <span id="progTPM" style="font-weight: 600; color: var(--accent-purple);">0</span></div>
+                    <div style="display: flex; justify-content: space-between;"><span>ETA:</span> <span id="progETA" style="font-weight: 600; color: var(--status-success);">--:--</span></div>
+                    <div style="background: var(--bg-input); height: 8px; border-radius: 4px; margin-top: 4px; overflow: hidden;">
+                        <div id="progBar" style="background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple)); width: 0%; height: 100%; transition: width 0.3s ease;"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="panel-section" style="flex: 1; display: flex; flex-direction: column;">
+                <div class="section-header">
+                    <h2>Activity Log</h2>
+                    <button class="btn-icon" id="clearLog" title="Clear">Clear</button>
+                </div>
+                <div class="log-container" id="logContainer" style="flex: 1; max-height: none;">
+                    <div class="log-empty">No activity yet...</div>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <div class="section-header" style="display: flex; justify-content: space-between; align-items: center;">
+                    <h2>API Status</h2>
+                    <div style="display: flex; gap: 5px;">
+                        <button class="btn-primary" id="openGetApiModal"
+                            style="padding: 4px 10px; font-size: 12px; height: auto;">Get API</button>
+                        <button class="btn-primary" id="openChatGptModal"
+                            style="padding: 4px 10px; font-size: 12px; height: auto; background-color: var(--status-success);">Login
+                            ChatGPT</button>
+                    </div>
+                </div>
+                <div class="omkar-keys-list" id="omkarKeysListWidget">
+                    <!-- Dynamically populated via JS -->
+                    <div class="log-empty">Waiting for data...</div>
+                </div>
+            </div>
+        </aside>
+    </main>
+
+    <!-- Settings Modal -->
+    <div class="modal-overlay hidden" id="settingsModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2> Settings</h2>
+                <button class="btn-icon modal-close" id="closeSettings">Close</button>
+            </div>
+            <div class="modal-tabs">
+                <button class="modal-tab active" data-mtab="providers">SMS Providers</button>
+                <button class="modal-tab" data-mtab="firebase">Firebase Links</button>
+                <button class="modal-tab" data-mtab="proxies">Proxies</button>
+                <button class="modal-tab" data-mtab="telegram">Telegram</button>
+                <button class="modal-tab" data-mtab="omkar">Omkar Keys</button>
+                <button class="modal-tab" data-mtab="timing">Timing</button>
+            </div>
+            <div class="modal-body">
+                <!-- Providers Tab -->
+                <div class="modal-tab-content active" id="mtab-providers">
+                    <div id="providerSettings"></div>
+                </div>
+                <!-- Firebase Links Tab -->
+                <div class="modal-tab-content" id="mtab-firebase">
+                    <div class="setting-group">
+                        <label>Firebase Database URLs (One per line)</label>
+                        <textarea id="firebaseUrlsTextarea" class="setting-input" rows="10"
+                            placeholder="https://my-firebase-db.firebaseio.com&#10;https://another-db.firebaseio.com"
+                            style="resize: vertical;"></textarea>
+                    </div>
+                </div>
+                <!-- Proxies Tab -->
+                <div class="modal-tab-content" id="mtab-proxies">
+                    <div class="setting-group">
+                        <label>HTTP/HTTPS Proxies (One per line)</label>
+                        <p class="setting-help">Format: http://ip:port or http://user:pass@ip:port. Slow proxies over 2500ms are skipped.</p>
+                        <textarea id="proxiesTextarea" class="setting-input" rows="10"
+                            placeholder="http://user:pass@1.2.3.4:8080&#10;http://5.6.7.8:3128"
+                            style="resize: vertical;"></textarea>
+                    </div>
+                </div>
+                <!-- Telegram Tab -->
+                <div class="modal-tab-content" id="mtab-telegram">
+                    <div class="setting-group">
+                        <label>Telegram API ID</label>
+                        <input type="text" class="setting-input" id="tgApiId" placeholder="123456">
+                    </div>
+                    <div class="setting-group">
+                        <label>Telegram API Hash</label>
+                        <input type="text" class="setting-input" id="tgApiHash" placeholder="0123456789abcdef0123456789abcdef">
+                    </div>
+                    <div class="setting-group">
+                        <label>Telegram Phone</label>
+                        <input type="text" class="setting-input" id="tgPhone" placeholder="+919876543210">
+                    </div>
+                </div>
+                <!-- Omkar Tab -->
+                <div class="modal-tab-content" id="mtab-omkar">
+                    <div class="setting-group">
+                        <label>Omkar Cloud API Keys</label>
+                        <div id="omkarKeysList"></div>
+                        <button class="btn-add-key" id="addOmkarKey">+ Add Key</button>
+                    </div>
+                </div>
+                <!-- Timing Tab -->
+                <div class="modal-tab-content" id="mtab-timing">
+                    <div class="setting-group">
+                        <label>OTP Poll Interval (seconds)</label>
+                        <input type="number" class="setting-input" id="settingPollInterval" value="3" min="1" max="30">
+                    </div>
+                    <div class="setting-group">
+                        <label>Cancel Wait Time (seconds)</label>
+                        <input type="number" class="setting-input" id="settingCancelWait" value="120" min="10"
+                            max="600">
+                    </div>
+                    <div class="setting-group">
+                        <label>Max OTP Attempts</label>
+                        <input type="number" class="setting-input" id="settingMaxAttempts" value="60" min="5" max="200">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-primary" id="saveSettings">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Order Detail Modal -->
+    <div class="modal-overlay hidden" id="orderDetailModal">
+        <div class="modal modal-detail">
+            <div class="modal-header">
+                <h2 id="detailPhone">Order Details</h2>
+                <button class="btn-icon modal-close" id="closeDetail">Close</button>
+            </div>
+            <div class="modal-body">
+                <div class="detail-meta" id="detailMeta"></div>
+                <div class="detail-otp-display" id="detailOtp"></div>
+                <h3 class="detail-section-title">Lifecycle Timeline</h3>
+                <div class="timeline" id="detailTimeline"></div>
+                <div class="detail-actions" id="detailActions"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Get API Modal -->
+    <div class="modal-overlay hidden" id="getApiModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Generate Omkar Keys</h2>
+                <button class="btn-icon modal-close" id="closeGetApiModal">Close</button>
+            </div>
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 15px;">
+                <p style="font-size: 14px; color: var(--text-secondary);">Paste Outlook credentials. One per
+                    line.<br>Format: <code>email|Password|refresh Token|client id</code></p>
+                <textarea id="outlookAccountsTextarea"
+                    placeholder="RandirMaeqi@outlook.com|Marguerite2Lydia|M.C533...|9e5f..."
+                    style="width: 100%; height: 150px; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 10px; border-radius: 6px; font-family: monospace; resize: vertical;"></textarea>
+
+                <div class="log-container" id="omkarGenLog" style="height: 150px; font-size: 12px;">
+                    <div class="log-empty">Waiting to start...</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="cancelGetApiModal">Close</button>
+                <button class="btn-primary" id="submitGetApiModal">Start Generation</button>
+                <button class="btn-danger hidden" id="stopGetApiModal">Stop Generation</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ChatGPT Login Modal -->
+    <div class="modal-overlay hidden" id="chatGptModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Login ChatGPT (USA Number)</h2>
+                <button class="btn-icon modal-close" id="closeChatGptModal">Close</button>
+            </div>
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 15px;">
+                <p style="font-size: 14px; color: var(--text-secondary);">Enter the number of tabs (accounts) you want
+                    to create simultaneously.</p>
+                <input type="number" id="chatGptNumTabs" placeholder="e.g. 3" min="1" max="10" value="3"
+                    style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); font-size: 14px;">
+
+                <div class="log-container" id="chatGptLog" style="height: 150px; font-size: 12px;">
+                    <div class="log-empty">Waiting to start...</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="cancelChatGptModal">Close</button>
+                <button class="btn-primary" id="submitChatGptModal">Start Login</button>
+                <button class="btn-danger hidden" id="stopChatGptModal">Stop Login</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Email Converter Modal -->
+    <div class="modal-overlay hidden" id="emailConverterModal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Convert Emails Format</h2>
+                <button class="btn-icon modal-close" id="closeEmailConverterModal">Close</button>
+            </div>
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 15px;">
+                <p style="font-size: 14px; color: var(--text-secondary);">Paste raw accounts
+                    (Email|Password|RefreshToken|ClientID)</p>
+                <textarea id="emailConverterInput" placeholder="Email|Password|RefreshToken|ClientID"
+                    style="width: 100%; height: 100px; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 10px; border-radius: 6px; font-family: monospace; resize: vertical;"></textarea>
+
+                <p style="font-size: 14px; color: var(--text-secondary);">Link Format (use {email}, {password},
+                    {refresh_token}, {client_id})</p>
+                <input type="text" id="emailConverterFormat"
+                    value="https://pixverify.shop/graphapi/{email}%7C{password}%7C{refresh_token}%7C{client_id}"
+                    style="width: 100%; padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); font-size: 14px;">
+
+                <button class="btn-primary" id="convertEmailsBtn" style="padding: 10px;">Convert Format</button>
+
+                <p style="font-size: 14px; color: var(--text-secondary);">Result:</p>
+                <textarea id="emailConverterOutput" readonly
+                    style="width: 100%; height: 100px; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 10px; border-radius: 6px; font-family: monospace; resize: vertical;"></textarea>
+
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="cancelEmailConverterModal">Close</button>
+                <button class="btn-primary"
+                    onclick="navigator.clipboard.writeText(document.getElementById('emailConverterOutput').value)">Copy
+                    Result</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Link Checker Modal -->
+    <div class="modal-overlay hidden" id="linkCheckerModal">
+        <div class="modal" style="max-width: 700px;">
+            <div class="modal-header">
+                <h2> Link Checker</h2>
+                <button class="btn-icon modal-close" id="closeLinkCheckerModal">Close</button>
+            </div>
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 12px;">
+                <p style="font-size: 14px; color: var(--text-secondary);">Paste Google subscription links (one per line). Uses persistent Google login to check validity.</p>
+                <textarea id="linkCheckerInput"
+                    placeholder="https://serviceactivation.google.com/subscription/new/AQCpiIG...&#10;https://one.google.com/activate-plan/subscription/new/AQCpiIG...&#10;&#10;Or leave empty to check all from extracted_links.csv"
+                    style="width: 100%; height: 120px; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 10px; border-radius: 6px; font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
+
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <button class="btn-secondary hidden" id="loginLinkChecker" style="padding: 10px;">Login Google</button>
+                    <button class="btn-secondary" id="loginTgChecker" style="padding: 10px;">Login TG</button>
+                    <button class="btn-primary" id="startTgCheck" style="flex: 1; padding: 10px;">TG Check</button>
+                    <button class="btn-primary hidden" id="startLinkCheck" style="flex: 1; padding: 10px;"> Check Links</button>
+                    <button class="btn-danger hidden" id="stopLinkCheck" style="flex: 1; padding: 10px;"> Stop</button>
+                    <div id="linkCheckProgress" style="font-size: 13px; color: var(--text-secondary); min-width: 120px; text-align: right;"></div>
+                </div>
+                <div id="tgLoginBox" class="hidden" style="display: flex; gap: 8px; align-items: center;">
+                    <input id="tgLoginCode" class="setting-input" placeholder="Telegram code" style="flex: 1;">
+                    <input id="tgLoginPassword" class="setting-input" placeholder="2FA password if any" type="password" style="flex: 1;">
+                    <button class="btn-primary" id="verifyTgChecker" style="padding: 10px 16px;">Verify</button>
+                </div>
+
+                <div class="log-container" id="linkCheckLog" style="height: 180px; font-size: 12px;">
+                    <div class="log-empty">Paste links above or leave empty, then click TG Check...</div>
+                </div>
+
+                <div id="linkCheckResults" style="display: none;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <span style="font-size: 14px; font-weight: 600; color: var(--text-primary);">
+                             Valid Links (<span id="validLinkCount">0</span>)
+                        </span>
+                        <button class="btn-primary" id="copyValidLinks" style="padding: 6px 14px; font-size: 12px;"> Copy Valid Links</button>
+                    </div>
+                    <textarea id="validLinksOutput" readonly
+                        style="width: 100%; height: 100px; background: var(--bg-primary); border: 1px solid #10b981; color: #10b981; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 11px; resize: vertical;"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="cancelLinkCheckerModal">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- APK / Link Extractor Modal -->
+    <div class="modal-overlay hidden" id="apkExtractorModal">
+        <div class="modal" style="max-width: 700px;">
+            <div class="modal-header">
+                <h2> APK / Link Extractor</h2>
+                <button class="btn-icon modal-close" id="closeApkExtractorModal">Close</button>
+            </div>
+            <div class="modal-body" style="display: flex; flex-direction: column; gap: 14px;">
+                <!-- APK Drop Zone -->
+                <div>
+                    <label style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; display: block;">Drop APK Files</label>
+                    <div id="apkDropZone" style="border: 2px dashed var(--border-color); border-radius: 10px; padding: 30px; text-align: center; cursor: pointer; transition: all 0.2s; background: var(--bg-primary);">
+                        <div style="font-size: 20px; margin-bottom: 8px; color: var(--accent-purple); font-weight: 700;">APK</div>
+                        <div style="font-size: 14px; color: var(--text-secondary);">Drag & drop APK files here or <span style="color: #8b5cf6; text-decoration: underline;">browse</span></div>
+                        <div style="font-size: 12px; color: var(--text-tertiary); margin-top: 4px;">Extracts Firebase URLs from APK binaries</div>
+                    </div>
+                    <input type="file" id="apkFileInput" accept=".apk" multiple style="display: none;">
+                </div>
+
+                <!-- Profex / Panel Link Decoder -->
+                <div>
+                    <label style="font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 6px; display: block;">Decode Panel Links</label>
+                    <textarea id="profexLinkInput"
+                        placeholder="Paste profexpanel / xipher-panel / badxweb links here (one per line)&#10;&#10;e.g. https://profexpanel.netlify.app/?s=aHR0cHM6Ly..."
+                        style="width: 100%; height: 80px; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 10px; border-radius: 6px; font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
+                    <button class="btn-primary" id="decodeProfexBtn" style="margin-top: 6px; padding: 8px 16px; background: #8b5cf6;"> Decode Links</button>
+                </div>
+
+                <!-- Results -->
+                <div class="log-container" id="apkExtractorLog" style="height: 200px; font-size: 12px;">
+                    <div class="log-empty">Drop APKs or paste panel links above...</div>
+                </div>
+
+                <!-- Summary -->
+                <div id="apkExtractorSummary" style="display: none; background: var(--bg-primary); border-radius: 8px; padding: 10px; font-size: 13px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                        <span> New: <strong id="apkNewCount" style="color: #22c55e;">0</strong></span>
+                        <span> Duplicate: <strong id="apkDupCount" style="color: #f59e0b;">0</strong></span>
+                        <span> Total: <strong id="apkTotalCount">0</strong></span>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn-primary" id="copyNewUrls" style="flex: 1; padding: 6px 10px; font-size: 12px; background: #22c55e;"> Copy New URLs</button>
+                        <button class="btn-primary" id="copyAllUrls" style="flex: 1; padding: 6px 10px; font-size: 12px; background: #8b5cf6;"> Copy All URLs</button>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" id="cancelApkExtractorModal">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <script src="/static/app.js?v=v3-tg-only-check-20260806"></script>
+</body>
+
+</html>
+
+
+
