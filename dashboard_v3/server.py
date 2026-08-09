@@ -117,6 +117,21 @@ JIO_LOGIN_URL = "https://www.jio.com/selfcare/login/"
 OTP_CLICK_INTERVAL = 4  # Min gap between Generate OTP clicks (controlled by UI)
 BROWSER_LAUNCH_INTERVAL = 4  # Interval between browser launches (controlled by UI)
 
+# Rotating user-agents to avoid Jio bot detection
+_JIO_USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_4_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Safari/605.1.15",
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1",
+]
+
+def get_random_ua():
+    return random.choice(_JIO_USER_AGENTS)
+
 # ─── Proxies ─────────────────────────────────────────────────────────────────
 
 
@@ -1736,16 +1751,29 @@ async def process_firebase_number(device_id, phone, fb_url, speed_delay, attempt
         await emit_order(order)
 
         # --- API LOGIC START ---
+        _ua = get_random_ua()
+        _is_mobile = "iPhone" in _ua or "Android" in _ua
         headers = {
-            "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
-            "sec-ch-ua": "\"Chromium\";v=\"149\", \"Not)A;Brand\";v=\"24\"",
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": "\"macOS\"",
+            "user-agent": _ua,
+            "sec-ch-ua-mobile": "?1" if _is_mobile else "?0",
+            "sec-ch-ua-platform": '"iOS"' if _is_mobile else '"Windows"',
             "referer": "https://www.jio.com/selfcare/login/",
+            "origin": "https://www.jio.com",
+            "accept": "application/json, text/plain, */*",
+            "accept-language": "en-IN,en;q=0.9,hi;q=0.8",
         }
 
         proxy = get_random_proxy()
-        proxy_label = " (via proxy)" if proxy else ""
+        # On retries, try to get a different proxy if possible
+        if attempt > 1:
+            proxies_list = config.get("proxies", [])
+            if len(proxies_list) > 1:
+                for _ in range(5):
+                    new_p = random.choice(proxies_list)
+                    if new_p != proxy:
+                        proxy = new_p
+                        break
+        proxy_label = f" (via proxy)" if proxy else " (no proxy)"
         order_event(order, f"Sending OTP via direct API{proxy_label}...{attempt_label}")
         await emit_order(order)
 
@@ -2060,9 +2088,9 @@ async def process_firebase_number(device_id, phone, fb_url, speed_delay, attempt
             return
 
     except RetryableJioError as e:
-        state.global_jio_pause_until = time.time() + 5
+        state.global_jio_pause_until = time.time() + 60  # 60s global pause on 429
         if attempt < max_attempts:
-            retry_delay = random.randint(120, 180)
+            retry_delay = random.randint(90, 150)
             await emit_log(f"⚠️ [{phone}] API Error: {e} — pausing queue for 5s, retrying this in {retry_delay}s (attempt {attempt}/{max_attempts})", "warning")
             order["status"] = "cancelled"
             order_event(order, f"API Error: {e} — retry scheduled in {retry_delay}s")
