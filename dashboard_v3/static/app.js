@@ -964,10 +964,17 @@ function renderSettings() {
     omkarList.innerHTML = '';
     (settingsData.omkar_keys || []).forEach(k => addOmkarKeyRow(k));
 
-    // Firebase URLs (Textarea)
-    const firebaseTextarea = document.getElementById('firebaseUrlsTextarea');
-    if (firebaseTextarea) {
-        firebaseTextarea.value = (settingsData.firebase_urls || []).join('\n');
+    // Firebase DB rows (URL + Key pairs)
+    const firebaseDbList = document.getElementById('firebaseDbList');
+    if (firebaseDbList) {
+        firebaseDbList.innerHTML = '';
+        const dbs = settingsData.firebase_dbs || [];
+        if (dbs.length > 0) {
+            dbs.forEach(db => addFirebaseDbRow(db.url || '', db.key || ''));
+        } else {
+            (settingsData.firebase_urls || []).forEach(url => addFirebaseDbRow(url, ''));
+        }
+        if (firebaseDbList.children.length === 0) addFirebaseDbRow('', '');
     }
 
     // Proxies (Textarea)
@@ -990,6 +997,19 @@ function renderSettings() {
     document.getElementById('settingPollInterval').value = timing.otp_poll_interval || 3;
     document.getElementById('settingCancelWait').value = timing.cancel_wait_seconds || 45;
     document.getElementById('settingMaxAttempts').value = timing.max_otp_attempts || 60;
+}
+
+function addFirebaseDbRow(url, key) {
+    const list = document.getElementById('firebaseDbList');
+    const row = document.createElement('div');
+    row.className = 'setting-input-row';
+    row.style.cssText = 'display:flex;gap:6px;align-items:center;';
+    row.innerHTML = `
+        <input type="text" class="setting-input firebase-db-url" value="${url}" placeholder="https://project-default-rtdb.firebaseio.com" style="flex:2;">
+        <input type="text" class="setting-input firebase-db-key" value="${key}" placeholder="Auth Key (optional)" style="flex:1;">
+        <button class="btn-remove-key" onclick="this.parentElement.remove()"></button>
+    `;
+    list.appendChild(row);
 }
 
 function addOmkarKeyRow(value) {
@@ -1057,15 +1077,17 @@ function saveSettings() {
         if (input.value.trim()) newConfig.omkar_keys.push(input.value.trim());
     });
 
-    // Firebase URLs
-    const firebaseTextarea = document.getElementById('firebaseUrlsTextarea');
-    if (firebaseTextarea) {
-        const lines = firebaseTextarea.value.split('\n');
-        for (const line of lines) {
-            const url = line.trim();
-            if (url) newConfig.firebase_urls.push(url);
+    // Firebase DB rows (URL + Key pairs)
+    newConfig.firebase_dbs = [];
+    newConfig.firebase_urls = [];
+    document.querySelectorAll('#firebaseDbList .setting-input-row').forEach(row => {
+        const url = row.querySelector('.firebase-db-url')?.value?.trim();
+        const key = row.querySelector('.firebase-db-key')?.value?.trim();
+        if (url) {
+            newConfig.firebase_dbs.push({ url, key: key || '' });
+            newConfig.firebase_urls.push(url);
         }
-    }
+    });
 
     // Proxies
     newConfig.proxies = [];

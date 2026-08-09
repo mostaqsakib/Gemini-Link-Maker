@@ -344,10 +344,10 @@
                 <!-- Firebase Links Tab -->
                 <div class="modal-tab-content" id="mtab-firebase">
                     <div class="setting-group">
-                        <label>Firebase Database URLs (One per line)</label>
-                        <textarea id="firebaseUrlsTextarea" class="setting-input" rows="10"
-                            placeholder="https://my-firebase-db.firebaseio.com&#10;https://another-db.firebaseio.com"
-                            style="resize: vertical;"></textarea>
+                        <label>Firebase Databases</label>
+                        <p class="setting-help">URL + Key (auth token) per database. Key is optional if database is public.</p>
+                        <div id="firebaseDbList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
+                        <button class="btn-secondary" onclick="addFirebaseDbRow('','')" style="width:100%;">+ Add Firebase Database</button>
                     </div>
                 </div>
                 <!-- Proxies Tab -->

