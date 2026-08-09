@@ -98,6 +98,7 @@ DEFAULT_CONFIG = {
     },
     "firebase_urls": [u.strip() for u in os.environ.get("FIREBASE_URLS", "").split(",") if u.strip()],
     "firebase_dbs": [],
+    "saved_links": [],
     "otpsms_servers": ["1", "2", "5", "6", "7", "8", "9", "11", "12", "13", "33", "36", "71", "234", "458", "2344", "4566", "64653"],
     "uotp_servers": ["5", "3", "4", "2", "1", "8"],
     "otpdoctor_services": ["13318", "13273"],
@@ -146,6 +147,9 @@ def load_config():
                 # Keep firebase_dbs from saved config (set via Settings UI)
                 if "firebase_dbs" not in merged:
                     merged["firebase_dbs"] = []
+                # Keep saved_links from saved config (persists across restarts)
+                if "saved_links" not in merged:
+                    merged["saved_links"] = []
                 return merged
         except:
             pass
@@ -247,9 +251,17 @@ async def index():
 
 @app.get("/download/success")
 async def download_success():
-    if not os.path.exists(SUCCESS_CSV):
-        return {"error": "File not found"}
-    return FileResponse(SUCCESS_CSV, media_type='text/csv', filename="extracted_links.csv")
+    """Download all saved links as TXT file."""
+    links = config.get("saved_links", [])
+    if not links:
+        return JSONResponse({"error": "No links saved"}, status_code=404)
+    from fastapi.responses import Response
+    content_txt = "\n".join(links)
+    return Response(
+        content=content_txt,
+        media_type="text/plain",
+        headers={"Content-Disposition": "attachment; filename=gemini_links.txt"}
+    )
 
 @app.get("/download/failed")
 async def download_failed():
@@ -260,27 +272,21 @@ async def download_failed():
 # ─── Links API ───────────────────────────────────────────────────────────────
 @app.get("/api/links")
 async def get_links():
-    """Return all extracted links from extracted_links.csv"""
-    links = []
-    if os.path.exists(SUCCESS_CSV):
-        try:
-            with open(SUCCESS_CSV, "r") as f:
-                reader = csv.reader(f)
-                for row in reader:
-                    if len(row) >= 4 and row[3]:
-                        links.append(row[3])  # return link string only, matching frontend expectation
-        except Exception:
-            pass
+    """Return all extracted links — from persistent config store"""
+    links = config.get("saved_links", [])
     return JSONResponse({"links": links, "count": len(links)})
 
 @app.post("/api/clear-links")
 async def clear_links():
-    """Clear all extracted links from CSV and links.txt after download."""
-    cleared = 0
+    """Clear all extracted links from persistent store and CSV."""
+    global config
+    cleared = len(config.get("saved_links", []))
     try:
+        config["saved_links"] = []
+        save_config(config)
+        # Also clear CSV and links.txt
         if os.path.exists(SUCCESS_CSV):
-            cleared = sum(1 for _ in open(SUCCESS_CSV)) 
-            open(SUCCESS_CSV, "w").close()  # truncate
+            open(SUCCESS_CSV, "w").close()
         links_txt = os.path.join(DATA_DIR, "links.txt")
         if os.path.exists(links_txt):
             open(links_txt, "w").close()
@@ -1065,12 +1071,23 @@ async def _handle_jio_number_impl(order):
                     # Prioritize serviceactivation.google.com if found, otherwise use the first caught URL
                     target_link = next((url for url in captured_url if "serviceactivation.google.com" in url), captured_url[0])
 
-                    # Save to links.txt
-                    with open(os.path.join(DATA_DIR, "links.txt"), "a") as f:
-                        f.write(f"{phone} | {target_link}\n")
+                    # Persist to config["saved_links"]
+                    global config
+                    _sl = config.get("saved_links", [])
+                    if target_link not in _sl:
+                        _sl.append(target_link)
+                        config["saved_links"] = _sl
+                        save_config(config)
+
+                    # Save to links.txt as backup
+                    try:
+                        with open(os.path.join(DATA_DIR, "links.txt"), "a") as f:
+                            f.write(f"{phone} | {target_link}\n")
+                    except Exception:
+                        pass
 
                     order["status"] = "logged_in"
-                    order_event(order, "✅ Link automatically extracted & saved to links.txt!")
+                    order_event(order, "✅ Link extracted & saved!")
                     await emit_order(order)
                     await emit_log(f"🎉 [{phone}] Gemini Link Saved!", "success")
                     await asyncio.sleep(2)
@@ -1926,8 +1943,22 @@ async def process_firebase_number(device_id, phone, fb_url, speed_delay, attempt
                 return
 
             # Success!
-            with open(SUCCESS_CSV, "a", newline="") as f:
-                csv.writer(f).writerow([fb_url, device_id, phone, target_link, online_status, otp_wait_time])
+            # Persist link to config["saved_links"] — survives Railway restarts/redeploys
+            global config
+            saved_links = config.get("saved_links", [])
+            if target_link not in saved_links:
+                saved_links.append(target_link)
+                config["saved_links"] = saved_links
+                save_config(config)
+
+            # Also write to CSV and links.txt as backup
+            try:
+                with open(SUCCESS_CSV, "a", newline="") as f:
+                    csv.writer(f).writerow([fb_url, device_id, phone, target_link, online_status, otp_wait_time])
+                with open(os.path.join(DATA_DIR, "links.txt"), "a") as f:
+                    f.write(f"{phone} | {target_link}\n")
+            except Exception:
+                pass
 
             # Mark device as used
             with open(used_file, "a") as f:
@@ -1935,13 +1966,10 @@ async def process_firebase_number(device_id, phone, fb_url, speed_delay, attempt
             state.batch_checked += 1
             await emit_batch_progress()
 
-            with open(os.path.join(DATA_DIR, "links.txt"), "a") as f:
-                f.write(f"{phone} | {target_link}\n")
-
             order["status"] = "logged_in"
-            order_event(order, "✅ Link extracted & saved to CSV/links.txt!")
+            order_event(order, "✅ Link extracted & saved!")
             await emit_order(order)
-            await emit_log(f"🎉 [{phone}] Gemini Link Saved (API)! ", "success")
+            await emit_log(f"🎉 [{phone}] Gemini Link Saved! ", "success")
 
             # Emit link_saved so frontend Links tab updates in real-time
             link_count = 0
@@ -2200,8 +2228,15 @@ async def firebase_sniper_worker(speed_delay, scan_mode="deep"):
             continue
 
         device_id = available_devices.pop(0)
-        # Don't write to used_firebase_devices.txt here — do it after we know the outcome
-        # (moved to process_firebase_number success/fail handlers)
+
+        # Log DB transition when switching to a new Firebase database
+        current_fb_url = device_map[device_id]["url"]
+        if not hasattr(state, "_last_fb_url"):
+            state._last_fb_url = None
+        if state._last_fb_url and state._last_fb_url != current_fb_url:
+            db_name = current_fb_url.split("//")[1].split(".")[0] if "//" in current_fb_url else current_fb_url
+            await emit_log(f"📦 Switched to next Firebase DB: {db_name}", "info")
+        state._last_fb_url = current_fb_url
 
         phone = device_map[device_id]["phone"]
         fb_url = device_map[device_id]["url"]
