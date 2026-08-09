@@ -82,4 +82,3 @@ By default, the CSV stores only a masked phone number. Pass
 `--include-full-phone` only when retaining the complete number is required and
 the output file is protected appropriately. OTPs, cookies, and session tokens
 are never written to the CSV.
-"# Gemini-Link-Maker" 

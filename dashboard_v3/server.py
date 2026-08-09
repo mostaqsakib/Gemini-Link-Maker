@@ -41,6 +41,10 @@ SPEED_MAP = {"slow": 2.0, "normal": 1.0, "fast": 0.3}
 ANALYTICS_MAX_AGE_DAYS = 7
 PROXIES_FILE = os.path.join(DATA_DIR, "proxies.txt")
 
+# Ensure required directories exist (Railway has ephemeral filesystem)
+os.makedirs(DATA_DIR, exist_ok=True)
+os.makedirs(PROFILES_DIR, exist_ok=True)
+
 def get_random_proxy():
     try:
         proxies = config.get("proxies", [])
@@ -2877,6 +2881,6 @@ async def process_chatgpt_login(sid, num_tabs):
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    print("🚀 Jio Sniper Dashboard v2.0 — http://localhost:8000")
     port = int(os.environ.get("PORT", 8000))
-uvicorn.run(sio_app, host="0.0.0.0", port=port, log_level="warning")
+    print(f"🚀 Jio Sniper Dashboard v2.0 — http://localhost:{port}")
+    uvicorn.run(sio_app, host="0.0.0.0", port=port, log_level="warning")
