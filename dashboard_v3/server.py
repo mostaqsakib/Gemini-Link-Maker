@@ -271,6 +271,10 @@ async def receive_incoming_email(request: Request):
 async def index():
     return FileResponse(os.path.join(static_dir, "index.html"))
 
+@app.get("/proxy-converter")
+async def proxy_converter_page():
+    return FileResponse(os.path.join(BASE_DIR, "static", "proxy_converter.html"))
+
 @app.get("/download/success")
 async def download_success():
     """Download all saved links as TXT file."""
