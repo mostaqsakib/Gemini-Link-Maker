@@ -33,8 +33,9 @@ import uvicorn
 # ─── Paths ────────────────────────────────────────────────────────────────────
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_DIR = os.path.dirname(BASE_DIR)
-DATA_DIR = os.path.join(PROJECT_DIR, "data")
-PROFILES_DIR = os.path.join(PROJECT_DIR, "profiles")
+# DATA_DIR can be overridden via env var for persistent volumes (e.g. Railway Volume at /data)
+DATA_DIR = os.environ.get("DATA_DIR", os.path.join(PROJECT_DIR, "data"))
+PROFILES_DIR = os.path.join(DATA_DIR, "profiles")
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 ANALYTICS_FILE = os.path.join(BASE_DIR, "analytics.json")
 SPEED_MAP = {"slow": 2.0, "normal": 1.0, "fast": 0.3}
@@ -271,6 +272,21 @@ async def get_links():
         except Exception:
             pass
     return JSONResponse({"links": links, "count": len(links)})
+
+@app.post("/api/clear-links")
+async def clear_links():
+    """Clear all extracted links from CSV and links.txt after download."""
+    cleared = 0
+    try:
+        if os.path.exists(SUCCESS_CSV):
+            cleared = sum(1 for _ in open(SUCCESS_CSV)) 
+            open(SUCCESS_CSV, "w").close()  # truncate
+        links_txt = os.path.join(DATA_DIR, "links.txt")
+        if os.path.exists(links_txt):
+            open(links_txt, "w").close()
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)})
+    return JSONResponse({"ok": True, "cleared": cleared})
 
 @app.get("/api/checked-links")
 async def get_checked_links():
@@ -2107,8 +2123,16 @@ async def firebase_sniper_worker(speed_delay, scan_mode="deep"):
         state.saved_device_map = {}
         await emit_log(f"▶ Resuming from pause — {len(available_devices)} devices remaining (no re-scan needed)", "success")
     else:
-        device_map = await fetch_initial_mapping(scan_mode=scan_mode)
-        if not device_map: return
+        # Sequential DB mode: process each Firebase DB one by one
+        # Build per-db list from firebase_dbs config (URL+Key pairs)
+        firebase_dbs = config.get("firebase_dbs", [])
+        if not firebase_dbs:
+            # fallback to firebase_urls list (no key)
+            firebase_dbs = [{"url": u, "key": ""} for u in config.get("firebase_urls", [])]
+
+        if not firebase_dbs:
+            await emit_log("No Firebase databases configured!", "error")
+            return
 
         used_file = os.path.join(DATA_DIR, "used_firebase_devices.txt")
         used_devices = set()
@@ -2116,7 +2140,32 @@ async def firebase_sniper_worker(speed_delay, scan_mode="deep"):
             with open(used_file, "r") as f:
                 used_devices = set(line.strip() for line in f if line.strip())
 
-        available_devices = [k for k in device_map.keys() if k not in used_devices]
+        # Scan ALL databases first, then process sequentially per-db
+        device_map = await fetch_initial_mapping(scan_mode=scan_mode)
+        if not device_map: return
+
+        # Group devices by their source Firebase URL (sequential order)
+        db_urls_ordered = []
+        seen = set()
+        for db in firebase_dbs:
+            url = clean_firebase_url((db.get("url") or "").strip())
+            if url and url not in seen:
+                db_urls_ordered.append(url)
+                seen.add(url)
+
+        # Build available_devices ordered: all devices from db1, then db2, etc.
+        available_devices = []
+        for db_url in db_urls_ordered:
+            db_devices = [k for k, v in device_map.items()
+                          if v.get("url") == db_url and k not in used_devices]
+            if db_devices:
+                await emit_log(f"📦 [{db_url.split('//')[1].split('.')[0]}] {len(db_devices)} devices queued", "info")
+            available_devices.extend(db_devices)
+        # Add any remaining devices not matched by URL order
+        matched = set(available_devices)
+        for k in device_map:
+            if k not in matched and k not in used_devices:
+                available_devices.append(k)
 
     await emit_log(f"Firebase: {len(available_devices)} devices available (using HTTP polling for OTP)", "info")
 

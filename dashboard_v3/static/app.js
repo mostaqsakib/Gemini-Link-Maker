@@ -382,6 +382,40 @@ function initControls() {
         navigator.clipboard.writeText(savedLinks.join('\n'));
         addLog(`Copied ${savedLinks.length} saved links`, 'success');
     });
+    document.getElementById('downloadAndClearLinks')?.addEventListener('click', async () => {
+        if (!savedLinks.length) { addLog('No links to download', 'warn'); return; }
+        const btn = document.getElementById('downloadAndClearLinks');
+        btn.disabled = true;
+        btn.textContent = '⏳ Downloading...';
+        // Download as .txt file
+        const blob = new Blob([savedLinks.join('\n')], { type: 'text/plain' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `gemini_links_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+        // Confirm before clearing
+        if (confirm(`Downloaded ${savedLinks.length} links. Clear them from server now?`)) {
+            try {
+                const resp = await fetch('/api/clear-links', { method: 'POST' });
+                const data = await resp.json();
+                if (data.ok) {
+                    savedLinks = [];
+                    updateLinkCounters(0);
+                    renderSavedLinks();
+                    addLog(`✅ Downloaded & cleared ${data.cleared} links`, 'success');
+                } else {
+                    addLog(`Clear failed: ${data.error}`, 'error');
+                }
+            } catch(e) {
+                addLog(`Clear request failed: ${e.message}`, 'error');
+            }
+        }
+        btn.disabled = false;
+        btn.textContent = '⬇️ Download & Clear';
+    });
     document.getElementById('copyAllCheckedLinks')?.addEventListener('click', () => {
         if (!checkedLinks.length) return;
         navigator.clipboard.writeText(checkedLinks.join('\n'));
