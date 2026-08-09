@@ -1597,9 +1597,10 @@ async function checkSingleProxy(proxy, btn = null) {
         const resp = await fetch('/api/proxy-check', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ proxy })
+            body: JSON.stringify({ proxies: [proxy] })
         });
-        const result = await resp.json();
+        const data = await resp.json();
+        const result = (data.results || [])[0] || { ok: false, status: 'No response', latency_ms: null };
         proxyResults[proxy] = result;
         renderProxyList();
         addLog(`${result.ok ? '✅' : '❌'} Proxy ${result.status}: ${result.latency_ms ?? '-'}ms`, result.ok ? 'success' : 'warn');
