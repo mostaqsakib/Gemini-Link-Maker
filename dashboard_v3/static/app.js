@@ -31,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initControls();
     initTabs();
     initModals();
+    initMobileUI();
 });
 
 //  Socket.IO 
@@ -169,6 +170,7 @@ function initSocket() {
         document.getElementById('forceStopBtn').classList.add('hidden');
         document.getElementById('pauseBanner').classList.add('hidden');
         updateConnectionStatus('sniping', 'Sniping...');
+        mobileSetSniping(true);
     });
     socket.on('sniping_stopped', () => {
         document.getElementById('startBtn').classList.remove('hidden');
@@ -178,6 +180,7 @@ function initSocket() {
         document.getElementById('forceStopBtn').classList.add('hidden');
         document.getElementById('pauseBanner').classList.add('hidden');
         updateConnectionStatus('connected', 'Connected');
+        mobileSetSniping(false);
     });
     socket.on('sniping_paused', (data) => {
         document.getElementById('pauseBtn').classList.add('hidden');
@@ -1858,69 +1861,50 @@ function updateTopStats() {
 }
 
 
-/* ═══════════════════════════════
-   MOBILE UI — bottom bar + panel
-   ═══════════════════════════════ */
-(function initMobileUI() {
-    const isMobile = () => window.innerWidth <= 768;
-
-    // Sync mobile start/stop buttons with desktop buttons
-    function syncMobileButtons(isSniping) {
-        const mobileStart = document.getElementById('mobileStartBtn');
-        const mobileStop  = document.getElementById('mobileStopBtn');
-        if (!mobileStart) return;
-        if (isSniping) {
-            mobileStart.style.display = 'none';
-            mobileStop.style.display  = 'block';
-        } else {
-            mobileStart.style.display = 'block';
-            mobileStop.style.display  = 'none';
-        }
+/* ═══════════════════════════════════════════
+   MOBILE UI
+   ═══════════════════════════════════════════ */
+function mobileSetSniping(active) {
+    const startBtn = document.getElementById('mobileStartBtn');
+    const stopBtn  = document.getElementById('mobileStopBtn');
+    if (!startBtn || !stopBtn) return;
+    if (active) {
+        startBtn.style.display = 'none';
+        stopBtn.style.display  = 'flex';
+    } else {
+        startBtn.style.display = 'flex';
+        stopBtn.style.display  = 'none';
     }
+}
 
-    // Mobile start button → triggers desktop startBtn
+function initMobileUI() {
+    // Mobile Start → desktop startBtn
     document.getElementById('mobileStartBtn')?.addEventListener('click', () => {
         document.getElementById('startBtn')?.click();
+        // Close drawer if open
+        document.querySelector('.left-panel')?.classList.remove('mobile-open');
     });
 
-    // Mobile stop button → triggers desktop stopBtn
+    // Mobile Stop → desktop stopBtn
     document.getElementById('mobileStopBtn')?.addEventListener('click', () => {
         document.getElementById('stopBtn')?.click();
     });
 
-    // Menu button → toggle left panel drawer
-    document.getElementById('mobileMenuBtn')?.addEventListener('click', () => {
+    // ☰ Menu → toggle left panel drawer
+    document.getElementById('mobileMenuBtn')?.addEventListener('click', (e) => {
+        e.stopPropagation();
         const lp = document.querySelector('.left-panel');
         if (!lp) return;
         lp.classList.toggle('mobile-open');
     });
 
-    // Close left panel when clicking outside
+    // Close drawer on outside tap
     document.addEventListener('click', (e) => {
-        if (!isMobile()) return;
+        if (window.innerWidth > 768) return;
         const lp = document.querySelector('.left-panel');
         const menuBtn = document.getElementById('mobileMenuBtn');
-        if (lp?.classList.contains('mobile-open') &&
-            !lp.contains(e.target) && e.target !== menuBtn) {
-            lp.classList.remove('mobile-open');
-        }
+        if (!lp?.classList.contains('mobile-open')) return;
+        if (lp.contains(e.target) || e.target === menuBtn) return;
+        lp.classList.remove('mobile-open');
     });
-
-    // Watch desktop start/stop state changes to sync mobile buttons
-    const startBtn = document.getElementById('startBtn');
-    const stopBtn  = document.getElementById('stopBtn');
-    if (startBtn && stopBtn) {
-        const obs = new MutationObserver(() => {
-            const stopping = stopBtn.classList.contains('hidden') === false;
-            syncMobileButtons(stopping);
-        });
-        obs.observe(stopBtn, { attributes: true, attributeFilter: ['class'] });
-    }
-
-    // Socket events to sync state
-    if (typeof socket !== 'undefined') {
-        socket.on('sniping_started', () => syncMobileButtons(true));
-        socket.on('sniping_stopped', () => syncMobileButtons(false));
-        socket.on('sniping_paused',  () => syncMobileButtons(true));
-    }
-})();
+}
