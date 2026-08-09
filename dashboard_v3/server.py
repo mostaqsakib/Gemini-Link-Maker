@@ -1252,14 +1252,31 @@ def clean_firebase_url(url):
             pass
     return url.rstrip('/')
 
+# Module-level Firebase auth map — populated by fetch_initial_mapping, used by all Firebase functions
+_url_key_map: dict = {}
+
+def fb_url_with_auth(base_url: str, path: str, extra_params: str = "") -> str:
+    """Build Firebase request URL, appending ?auth=KEY if key exists for this URL."""
+    key = _url_key_map.get(base_url, "")
+    auth_param = f"auth={key}" if key else ""
+    if extra_params and auth_param:
+        return f"{base_url}/{path}?{extra_params}&{auth_param}"
+    elif auth_param:
+        return f"{base_url}/{path}?{auth_param}"
+    elif extra_params:
+        return f"{base_url}/{path}?{extra_params}"
+    else:
+        return f"{base_url}/{path}"
+
 async def fetch_initial_mapping(scan_mode="deep"):
     scan_labels = {"normal": "ONLINE ONLY", "deep": "DEEP SCAN (5d active)", "deepest": "DEEPEST SCAN (20d active)"}
     scan_label = scan_labels.get(scan_mode, "DEEP SCAN")
     await emit_log(f"Fetching Firebase clients ({scan_label})...", "info")
     device_map = {}
 
-    # Build url_key_map: {clean_url: auth_key_or_empty}
-    url_key_map = {}
+    # Build _url_key_map: {clean_url: auth_key_or_empty} — module-level for cross-function access
+    global _url_key_map
+    _url_key_map = {}
     # First load from firebase_dbs (URL + Key pairs from Settings UI)
     for db in config.get("firebase_dbs", []):
         raw_url = (db.get("url") or "").strip()
@@ -1267,31 +1284,20 @@ async def fetch_initial_mapping(scan_mode="deep"):
         if raw_url:
             cleaned = clean_firebase_url(raw_url)
             if ".firebaseio.com" in cleaned:
-                url_key_map[cleaned] = key
+                _url_key_map[cleaned] = key
     # Also load from firebase_urls (env var / legacy), no key
     for raw_url in config.get("firebase_urls", []):
         cleaned = clean_firebase_url(raw_url.strip())
-        if ".firebaseio.com" in cleaned and cleaned not in url_key_map:
-            url_key_map[cleaned] = ""
+        if ".firebaseio.com" in cleaned and cleaned not in _url_key_map:
+            _url_key_map[cleaned] = ""
 
-    urls = list(url_key_map.keys())
+    urls = list(_url_key_map.keys())
 
     if not urls:
         await emit_log("No valid Firebase URLs configured!", "error")
         return device_map
 
-    def fb_url_with_auth(base_url, path, extra_params=""):
-        """Build Firebase request URL, appending ?auth=KEY if key exists."""
-        key = url_key_map.get(base_url, "")
-        auth_param = f"auth={key}" if key else ""
-        if extra_params and auth_param:
-            return f"{base_url}/{path}?{extra_params}&{auth_param}"
-        elif auth_param:
-            return f"{base_url}/{path}?{auth_param}"
-        elif extra_params:
-            return f"{base_url}/{path}?{extra_params}"
-        else:
-            return f"{base_url}/{path}" 
+    # fb_url_with_auth is now a module-level function above
 
     # Cutoff in milliseconds (Firebase message keys are ms timestamps)
     cutoff_days = 20 if scan_mode == "deepest" else 5
