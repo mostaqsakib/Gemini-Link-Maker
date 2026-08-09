@@ -1020,14 +1020,16 @@ function renderSettings() {
         proxiesTextarea.value = (settingsData.proxies || []).join('\n');
     }
 
-    // Telegram checker
-    const tg = settingsData.tg_checker || {};
+    // Telegram checker + monitor
+    const tg = settingsData.tg_checker || settingsData.tg_monitor || {};
     const tgApiId = document.getElementById('tgApiId');
     const tgApiHash = document.getElementById('tgApiHash');
     const tgPhone = document.getElementById('tgPhone');
     if (tgApiId) tgApiId.value = tg.api_id || '';
     if (tgApiHash) tgApiHash.value = tg.api_hash || '';
     if (tgPhone) tgPhone.value = tg.phone || '';
+    const tgChannel = document.getElementById('tgMonitorChannel');
+    if (tgChannel) tgChannel.value = (settingsData.tg_monitor || {}).channel || '';
 
     // Timing
     const timing = settingsData.timing || {};
@@ -1908,4 +1910,132 @@ function initMobileUI() {
         if (lp.contains(e.target) || e.target === menuBtn) return;
         lp.classList.remove('mobile-open');
     });
+}
+
+/* ═══════════════════════════════════
+   TG MONITOR UI
+   ═══════════════════════════════════ */
+function initTgMonitor() {
+    // Status updates
+    socket.on('tg_monitor_status', (data) => {
+        const el = document.getElementById('tgMonitorStatus');
+        if (!el) return;
+        if (data.running) {
+            el.textContent = '✅ Status: Running — watching channel';
+            el.style.color = '#22c55e';
+        } else {
+            el.textContent = '⭕ Status: Not running';
+            el.style.color = '#94a3b8';
+        }
+    });
+
+    // Auto-start sniper when new Firebase DB added via TG
+    socket.on('auto_start_sniper', () => {
+        if (!state?.is_sniping) {
+            addLog('📡 TG Monitor: Auto-starting sniper with new DB...', 'info');
+            setTimeout(() => document.getElementById('startBtn')?.click(), 1000);
+        }
+    });
+
+    socket.on('firebase_dbs_updated', (data) => {
+        addLog(`📡 TG Monitor: ${data.added?.length || 0} new Firebase DB(s) added`, 'success');
+        loadSavedLinks();
+    });
+
+    // Login button
+    document.getElementById('tgMonitorLoginBtn')?.addEventListener('click', async () => {
+        const api_id = document.getElementById('tgApiId')?.value.trim();
+        const api_hash = document.getElementById('tgApiHash')?.value.trim();
+        const phone = document.getElementById('tgPhone')?.value.trim();
+        if (!api_id || !api_hash || !phone) {
+            addLog('Fill in API ID, API Hash, and Phone first', 'error');
+            return;
+        }
+        const btn = document.getElementById('tgMonitorLoginBtn');
+        btn.disabled = true;
+        btn.textContent = '⏳ Sending code...';
+        try {
+            const resp = await fetch('/api/tg-monitor/send-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ api_id, api_hash, phone })
+            });
+            const data = await resp.json();
+            if (data.ok && data.needs_code) {
+                document.getElementById('tgMonitorAuth').style.display = 'block';
+                addLog('📱 Code sent to your Telegram! Enter it below.', 'success');
+            } else if (data.ok && data.already_auth) {
+                addLog('✅ Already logged in!', 'success');
+            } else {
+                addLog(`❌ Login error: ${data.error}`, 'error');
+            }
+        } catch(e) {
+            addLog(`❌ Login failed: ${e.message}`, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '🔑 Login & Connect';
+        }
+    });
+
+    // Verify code button
+    document.getElementById('tgMonitorVerifyBtn')?.addEventListener('click', async () => {
+        const api_id = document.getElementById('tgApiId')?.value.trim();
+        const api_hash = document.getElementById('tgApiHash')?.value.trim();
+        const phone = document.getElementById('tgPhone')?.value.trim();
+        const code = document.getElementById('tgMonitorCode')?.value.trim();
+        const password = document.getElementById('tgMonitorPass')?.value.trim();
+        const btn = document.getElementById('tgMonitorVerifyBtn');
+        btn.disabled = true;
+        btn.textContent = '⏳ Verifying...';
+        try {
+            const resp = await fetch('/api/tg-monitor/verify-code', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ api_id, api_hash, phone, code, password })
+            });
+            const data = await resp.json();
+            if (data.ok) {
+                addLog('✅ Logged in successfully!', 'success');
+                document.getElementById('tgMonitorAuth').style.display = 'none';
+            } else if (data.needs_password) {
+                document.getElementById('tgMonitorPassGroup').style.display = 'block';
+                addLog('🔐 2FA password required', 'warn');
+            } else {
+                addLog(`❌ Verify error: ${data.error}`, 'error');
+            }
+        } catch(e) {
+            addLog(`❌ Verify failed: ${e.message}`, 'error');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = '✅ Verify Code';
+        }
+    });
+
+    // Start monitor
+    document.getElementById('tgMonitorStartBtn')?.addEventListener('click', () => {
+        const channel = document.getElementById('tgMonitorChannel')?.value.trim();
+        if (!channel) { addLog('Enter channel username or ID first', 'error'); return; }
+        // Save channel to config
+        socket.emit('save_tg_monitor_config', {
+            channel,
+            api_id: document.getElementById('tgApiId')?.value.trim(),
+            api_hash: document.getElementById('tgApiHash')?.value.trim(),
+            phone: document.getElementById('tgPhone')?.value.trim(),
+        });
+        socket.emit('start_tg_monitor');
+        addLog('📡 TG Monitor starting...', 'info');
+    });
+
+    // Stop monitor
+    document.getElementById('tgMonitorStopBtn')?.addEventListener('click', () => {
+        socket.emit('stop_tg_monitor');
+    });
+
+    // Get initial status
+    socket.emit('get_tg_monitor_status');
+}
+
+// Call after socket init
+if (typeof socket !== 'undefined') {
+    document.addEventListener('DOMContentLoaded', initTgMonitor);
 }

@@ -363,6 +363,32 @@
                 </div>
                 <!-- Telegram Tab -->
                 <div class="modal-tab-content" id="mtab-telegram">
+                    <!-- TG Monitor section -->
+                    <div class="setting-group" style="background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.2);border-radius:10px;padding:14px;margin-bottom:14px;">
+                        <label style="color:#60a5fa;font-size:13px;font-weight:700;">📡 Firebase Panel Auto-Monitor</label>
+                        <p class="setting-help" style="margin-bottom:10px;">Watches a Telegram channel and auto-adds any Firebase URLs posted there.</p>
+                        <div class="setting-group">
+                            <label>Channel Username or ID</label>
+                            <input type="text" class="setting-input" id="tgMonitorChannel" placeholder="@mychannel or -1001234567890">
+                        </div>
+                        <div id="tgMonitorAuth" style="display:none;">
+                            <div class="setting-group">
+                                <label>Login Code (sent to your phone)</label>
+                                <input type="text" class="setting-input" id="tgMonitorCode" placeholder="12345">
+                            </div>
+                            <div class="setting-group" id="tgMonitorPassGroup" style="display:none;">
+                                <label>2FA Password</label>
+                                <input type="password" class="setting-input" id="tgMonitorPass" placeholder="Your 2FA password">
+                            </div>
+                            <button class="btn-secondary" id="tgMonitorVerifyBtn" style="width:100%;margin-top:4px;">✅ Verify Code</button>
+                        </div>
+                        <div style="display:flex;gap:8px;margin-top:10px;">
+                            <button class="btn-secondary" id="tgMonitorLoginBtn" style="flex:1;">🔑 Login & Connect</button>
+                            <button class="btn-secondary" id="tgMonitorStartBtn" style="flex:1;background:#22c55e;color:#fff;border:none;">▶ Start Monitor</button>
+                            <button class="btn-secondary" id="tgMonitorStopBtn" style="flex:1;background:#ef4444;color:#fff;border:none;">■ Stop</button>
+                        </div>
+                        <div id="tgMonitorStatus" style="margin-top:8px;font-size:12px;color:#94a3b8;">Status: Not running</div>
+                    </div>
                     <div class="setting-group">
                         <label>Telegram API ID</label>
                         <input type="text" class="setting-input" id="tgApiId" placeholder="123456">
@@ -372,7 +398,7 @@
                         <input type="text" class="setting-input" id="tgApiHash" placeholder="0123456789abcdef0123456789abcdef">
                     </div>
                     <div class="setting-group">
-                        <label>Telegram Phone</label>
+                        <label>Phone Number</label>
                         <input type="text" class="setting-input" id="tgPhone" placeholder="+919876543210">
                     </div>
                 </div>

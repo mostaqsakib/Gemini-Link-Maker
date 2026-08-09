@@ -110,6 +110,13 @@ DEFAULT_CONFIG = {
         "otp_poll_interval": 3,
         "cancel_wait_seconds": 120,
         "max_otp_attempts": 60
+    },
+    "tg_monitor": {
+        "api_id": "",
+        "api_hash": "",
+        "phone": "",
+        "channel": "",
+        "enabled": False
     }
 }
 
@@ -3142,6 +3149,215 @@ async def process_chatgpt_login(sid, num_tabs):
 
     await sio.emit('chatgpt_log', {'msg': 'Automation sequence completed.', 'level': 'success'}, to=sid)
     await sio.emit('chatgpt_login_done', {}, to=sid)
+
+
+# ─── Telegram Channel Monitor ────────────────────────────────────────────────
+_tg_client = None
+_tg_monitor_task = None
+
+async def tg_extract_firebase_urls(text: str) -> list:
+    """Extract Firebase Realtime DB URLs from a message."""
+    import re
+    patterns = [
+        r'https?://[a-zA-Z0-9_-]+-default-rtdb\.firebaseio\.com',
+        r'https?://[a-zA-Z0-9_-]+-default-rtdb\.[a-z0-9-]+\.firebasedatabase\.app',
+    ]
+    urls = []
+    for p in patterns:
+        urls += re.findall(p, text)
+    # Also try to extract auth key if present (format: url key or url\nkey)
+    results = []
+    for url in set(urls):
+        url = url.rstrip('/')
+        # Look for key near the URL in text
+        key = ""
+        idx = text.find(url)
+        if idx >= 0:
+            nearby = text[idx:idx+200]
+            key_match = re.search(r'[Kk]ey[:\s]+([A-Za-z0-9_-]{6,})', nearby)
+            if not key_match:
+                key_match = re.search(r'auth[:\s]+([A-Za-z0-9_-]{6,})', nearby)
+            if key_match:
+                key = key_match.group(1)
+        results.append({"url": url, "key": key})
+    return results
+
+async def tg_add_firebase_dbs(new_dbs: list):
+    """Add new Firebase DBs to config and queue, avoiding duplicates."""
+    global config
+    existing = {db.get("url", "").rstrip("/") for db in config.get("firebase_dbs", [])}
+    added = []
+    for db in new_dbs:
+        url = db.get("url", "").rstrip("/")
+        if url and url not in existing:
+            config.setdefault("firebase_dbs", []).append(db)
+            config.setdefault("firebase_urls", [])
+            if url not in config["firebase_urls"]:
+                config["firebase_urls"].append(url)
+            # Update _url_key_map too
+            _url_key_map[clean_firebase_url(url)] = db.get("key", "")
+            existing.add(url)
+            added.append(url)
+    if added:
+        save_config(config)
+        db_names = [u.split("//")[1].split(".")[0] for u in added]
+        await emit_log(f"📡 TG Monitor: Added {len(added)} new Firebase DB(s): {', '.join(db_names)}", "success")
+        await sio.emit("firebase_dbs_updated", {"added": added})
+        # If sniper is not running, auto-start
+        if not state.is_sniping:
+            await emit_log("🚀 Auto-starting sniper with new Firebase DB...", "info")
+            await sio.emit("auto_start_sniper")
+    return added
+
+async def tg_monitor_loop():
+    """Monitor a Telegram channel for new Firebase URLs."""
+    global _tg_client
+    try:
+        from telethon import TelegramClient, events
+        from telethon.sessions import StringSession
+    except ImportError:
+        await emit_log("❌ Telethon not installed. Run: pip install telethon", "error")
+        return
+
+    cfg = config.get("tg_monitor", {})
+    api_id = cfg.get("api_id", "")
+    api_hash = cfg.get("api_hash", "")
+    phone = cfg.get("phone", "")
+    channel = cfg.get("channel", "")
+    session_str = cfg.get("session", "")
+
+    if not api_id or not api_hash or not phone or not channel:
+        await emit_log("❌ TG Monitor: api_id, api_hash, phone, channel are required in Settings", "error")
+        return
+
+    session_path = os.path.join(DATA_DIR, "tg_monitor_session")
+    try:
+        _tg_client = TelegramClient(session_path, int(api_id), api_hash)
+        await _tg_client.start(phone=phone)
+        await emit_log(f"📡 TG Monitor: Connected! Watching channel: {channel}", "success")
+
+        @_tg_client.on(events.NewMessage(chats=channel))
+        async def on_new_message(event):
+            text = event.message.text or ""
+            if not text:
+                return
+            dbs = await tg_extract_firebase_urls(text)
+            if dbs:
+                await emit_log(f"📡 TG Monitor: New message with {len(dbs)} Firebase URL(s)", "info")
+                await tg_add_firebase_dbs(dbs)
+
+        await _tg_client.run_until_disconnected()
+    except Exception as e:
+        await emit_log(f"❌ TG Monitor error: {e}", "error")
+    finally:
+        _tg_client = None
+
+@sio.on("save_tg_monitor_config")
+async def on_save_tg_monitor_config(sid, data):
+    global config
+    config.setdefault("tg_monitor", {}).update({
+        "channel": data.get("channel", ""),
+        "api_id": data.get("api_id", ""),
+        "api_hash": data.get("api_hash", ""),
+        "phone": data.get("phone", ""),
+        "enabled": True
+    })
+    # Also sync to tg_checker for compatibility
+    config.setdefault("tg_checker", {}).update({
+        "api_id": data.get("api_id", ""),
+        "api_hash": data.get("api_hash", ""),
+        "phone": data.get("phone", ""),
+    })
+    save_config(config)
+    await emit_log(f"📡 TG Monitor config saved. Channel: {data.get('channel','')}", "success")
+
+@sio.on("start_tg_monitor")
+async def on_start_tg_monitor(sid, data=None):
+    global _tg_monitor_task
+    if _tg_monitor_task and not _tg_monitor_task.done():
+        await emit_log("📡 TG Monitor already running", "warn")
+        return
+    _tg_monitor_task = asyncio.create_task(tg_monitor_loop())
+    await sio.emit("tg_monitor_status", {"running": True}, to=sid)
+
+@sio.on("stop_tg_monitor")
+async def on_stop_tg_monitor(sid, data=None):
+    global _tg_client, _tg_monitor_task
+    if _tg_client:
+        try:
+            await _tg_client.disconnect()
+        except Exception:
+            pass
+        _tg_client = None
+    if _tg_monitor_task:
+        _tg_monitor_task.cancel()
+        _tg_monitor_task = None
+    await emit_log("📡 TG Monitor stopped", "warn")
+    await sio.emit("tg_monitor_status", {"running": False}, to=sid)
+
+@sio.on("get_tg_monitor_status")
+async def on_get_tg_monitor_status(sid, data=None):
+    running = _tg_monitor_task is not None and not _tg_monitor_task.done()
+    await sio.emit("tg_monitor_status", {"running": running}, to=sid)
+
+@app.post("/api/tg-monitor/send-code")
+async def tg_monitor_send_code(request: Request):
+    """Send login code to phone for Telegram auth."""
+    body = await request.json()
+    phone = body.get("phone", "")
+    api_id = body.get("api_id", "")
+    api_hash = body.get("api_hash", "")
+    if not all([phone, api_id, api_hash]):
+        return JSONResponse({"ok": False, "error": "Missing fields"})
+    try:
+        from telethon import TelegramClient
+        session_path = os.path.join(DATA_DIR, "tg_monitor_session")
+        client = TelegramClient(session_path, int(api_id), api_hash)
+        await client.connect()
+        if not await client.is_user_authorized():
+            await client.send_code_request(phone)
+            await client.disconnect()
+            return JSONResponse({"ok": True, "needs_code": True})
+        await client.disconnect()
+        return JSONResponse({"ok": True, "needs_code": False, "already_auth": True})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)})
+
+@app.post("/api/tg-monitor/verify-code")
+async def tg_monitor_verify_code(request: Request):
+    """Verify login code and save session."""
+    body = await request.json()
+    phone = body.get("phone", "")
+    code = body.get("code", "")
+    api_id = body.get("api_id", "")
+    api_hash = body.get("api_hash", "")
+    password = body.get("password", "")
+    if not all([phone, code, api_id, api_hash]):
+        return JSONResponse({"ok": False, "error": "Missing fields"})
+    try:
+        from telethon import TelegramClient
+        from telethon.errors import SessionPasswordNeededError
+        session_path = os.path.join(DATA_DIR, "tg_monitor_session")
+        client = TelegramClient(session_path, int(api_id), api_hash)
+        await client.connect()
+        try:
+            await client.sign_in(phone, code)
+        except SessionPasswordNeededError:
+            if password:
+                await client.sign_in(password=password)
+            else:
+                await client.disconnect()
+                return JSONResponse({"ok": False, "needs_password": True})
+        await client.disconnect()
+        # Save credentials to config
+        global config
+        config.setdefault("tg_monitor", {}).update({
+            "api_id": api_id, "api_hash": api_hash, "phone": phone
+        })
+        save_config(config)
+        return JSONResponse({"ok": True})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)})
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
