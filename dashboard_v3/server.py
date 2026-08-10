@@ -2382,6 +2382,23 @@ async def firebase_sniper_worker(speed_delay, scan_mode="deep"):
 
         await emit_log("✅ Firebase Direct completed — all devices processed!", "success")
 
+        # Wait for TG Monitor to add a new Firebase DB (check every 30s, up to 30 mins)
+        await emit_log("⏳ Waiting for new Firebase DB from TG Monitor...", "info")
+        prev_db_count = len(config.get("firebase_dbs", [])) or len(config.get("firebase_urls", []))
+        for _ in range(60):
+            await asyncio.sleep(30)
+            if state.stop_event.is_set():
+                return
+            cur_dbs = config.get("firebase_dbs", [])
+            cur_urls = config.get("firebase_urls", [])
+            cur_count = len(cur_dbs) or len(cur_urls)
+            if cur_count > prev_db_count:
+                await emit_log(f"🆕 New Firebase DB detected! Restarting sniper...", "success")
+                # Clear used devices so new DB gets processed
+                asyncio.create_task(firebase_sniper_worker(scan_mode, speed_delay))
+                return
+        await emit_log("⏰ No new Firebase DB after 30 minutes. Stopping.", "warn")
+
 # ─── Sniper Workers ──────────────────────────────────────────────────────────
 async def sniper_worker(p_name, speed_delay):
     delay = config["providers"].get(p_name, {}).get("delay", 3) * speed_delay
