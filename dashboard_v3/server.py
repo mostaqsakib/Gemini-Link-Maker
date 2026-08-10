@@ -2392,7 +2392,7 @@ async def firebase_sniper_worker(speed_delay, scan_mode="deep"):
                 return
             await emit_log("🆕 New Firebase DB received! Restarting sniper...", "success")
             _new_firebase_event.clear()
-            asyncio.create_task(firebase_sniper_worker(scan_mode, speed_delay))
+            asyncio.create_task(firebase_sniper_worker(speed_delay, scan_mode=scan_mode))
         except asyncio.TimeoutError:
             await emit_log("⏰ No new Firebase DB after 30 minutes. Stopping.", "warn")
 
