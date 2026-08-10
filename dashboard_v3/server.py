@@ -2271,8 +2271,19 @@ async def firebase_sniper_worker(speed_delay, scan_mode="deep"):
             firebase_dbs = [{"url": u, "key": ""} for u in config.get("firebase_urls", [])]
 
         if not firebase_dbs:
-            await emit_log("No Firebase databases configured!", "error")
-            return
+            await emit_log("⏳ No Firebase databases yet — waiting for TG Monitor to add one (checking every 30s)...", "warn")
+            # Wait up to 30 minutes for TG Monitor to add a Firebase URL
+            for _ in range(60):
+                await asyncio.sleep(30)
+                firebase_dbs = config.get("firebase_dbs", [])
+                if not firebase_dbs:
+                    firebase_dbs = [{"url": u, "key": ""} for u in config.get("firebase_urls", [])]
+                if firebase_dbs:
+                    await emit_log(f"✅ Firebase DB received from TG Monitor! Starting scan...", "success")
+                    break
+            else:
+                await emit_log("❌ No Firebase databases configured after 30 minutes. Stopping.", "error")
+                return
 
         used_file = os.path.join(DATA_DIR, "used_firebase_devices.txt")
         used_devices = set()
@@ -3218,10 +3229,13 @@ async def tg_add_firebase_dbs(new_dbs: list):
         db_names = [u.split("//")[1].split(".")[0] for u in added]
         await emit_log(f"📡 TG Monitor: Added {len(added)} new Firebase DB(s): {', '.join(db_names)}", "success")
         await sio.emit("firebase_dbs_updated", {"added": added})
-        # If sniper is not running, auto-start
         if not state.is_sniping:
-            await emit_log("🚀 Auto-starting sniper with new Firebase DB...", "info")
+            # Sniper not running — auto start it
+            await emit_log("🚀 TG Monitor: Auto-starting sniper...", "info")
             await sio.emit("auto_start_sniper")
+        else:
+            # Sniper is running/waiting — it will pick up new DBs automatically on next scan
+            await emit_log("🔄 TG Monitor: Sniper will pick up new DB on next cycle", "info")
     return added
 
 async def tg_monitor_loop():

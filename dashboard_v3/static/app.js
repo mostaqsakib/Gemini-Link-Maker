@@ -1929,12 +1929,16 @@ function initTgMonitor() {
         }
     });
 
-    // Auto-start sniper when new Firebase DB added via TG
+    // Auto-start sniper when new Firebase DB added via TG Monitor
     socket.on('auto_start_sniper', () => {
-        if (!state?.is_sniping) {
-            addLog('📡 TG Monitor: Auto-starting sniper with new DB...', 'info');
-            setTimeout(() => document.getElementById('startBtn')?.click(), 1000);
-        }
+        addLog('📡 TG Monitor: Auto-starting sniper with new Firebase DB...', 'info');
+        // Click start button after short delay to let config save
+        setTimeout(() => {
+            const startBtn = document.getElementById('startBtn');
+            if (startBtn && !startBtn.classList.contains('hidden')) {
+                startBtn.click();
+            }
+        }, 2000);
     });
 
     socket.on('firebase_dbs_updated', (data) => {
