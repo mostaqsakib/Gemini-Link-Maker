@@ -2382,22 +2382,19 @@ async def firebase_sniper_worker(speed_delay, scan_mode="deep"):
 
         await emit_log("✅ Firebase Direct completed — all devices processed!", "success")
 
-        # Wait for TG Monitor to add a new Firebase DB (check every 30s, up to 30 mins)
+        # Wait for TG Monitor to signal a new Firebase DB (event-based, instant wake-up)
         await emit_log("⏳ Waiting for new Firebase DB from TG Monitor...", "info")
-        prev_db_count = len(config.get("firebase_dbs", [])) or len(config.get("firebase_urls", []))
-        for _ in range(60):
-            await asyncio.sleep(30)
+        _new_firebase_event.clear()
+        try:
+            # Wait up to 30 minutes, but wake up instantly when TG Monitor adds a DB
+            await asyncio.wait_for(_new_firebase_event.wait(), timeout=1800)
             if state.stop_event.is_set():
                 return
-            cur_dbs = config.get("firebase_dbs", [])
-            cur_urls = config.get("firebase_urls", [])
-            cur_count = len(cur_dbs) or len(cur_urls)
-            if cur_count > prev_db_count:
-                await emit_log(f"🆕 New Firebase DB detected! Restarting sniper...", "success")
-                # Clear used devices so new DB gets processed
-                asyncio.create_task(firebase_sniper_worker(scan_mode, speed_delay))
-                return
-        await emit_log("⏰ No new Firebase DB after 30 minutes. Stopping.", "warn")
+            await emit_log("🆕 New Firebase DB received! Restarting sniper...", "success")
+            _new_firebase_event.clear()
+            asyncio.create_task(firebase_sniper_worker(scan_mode, speed_delay))
+        except asyncio.TimeoutError:
+            await emit_log("⏰ No new Firebase DB after 30 minutes. Stopping.", "warn")
 
 # ─── Sniper Workers ──────────────────────────────────────────────────────────
 async def sniper_worker(p_name, speed_delay):
@@ -3182,6 +3179,7 @@ async def process_chatgpt_login(sid, num_tabs):
 # ─── Telegram Channel Monitor ────────────────────────────────────────────────
 _tg_client = None
 _tg_monitor_task = None
+_new_firebase_event = asyncio.Event()  # signals sniper to wake up when new DB added
 
 async def tg_extract_firebase_urls(text: str) -> list:
     """Extract Firebase URLs + Keys from channel messages.
@@ -3246,13 +3244,13 @@ async def tg_add_firebase_dbs(new_dbs: list):
         db_names = [u.split("//")[1].split(".")[0] for u in added]
         await emit_log(f"📡 TG Monitor: Added {len(added)} new Firebase DB(s): {', '.join(db_names)}", "success")
         await sio.emit("firebase_dbs_updated", {"added": added})
+        # Wake up waiting sniper immediately
+        _new_firebase_event.set()
         if not state.is_sniping:
-            # Sniper not running — auto start it
             await emit_log("🚀 TG Monitor: Auto-starting sniper...", "info")
             await sio.emit("auto_start_sniper")
         else:
-            # Sniper is running/waiting — it will pick up new DBs automatically on next scan
-            await emit_log("🔄 TG Monitor: Sniper will pick up new DB on next cycle", "info")
+            await emit_log("🔄 TG Monitor: Sniper waking up with new DB...", "info")
     return added
 
 async def tg_monitor_loop():
