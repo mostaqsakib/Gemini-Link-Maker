@@ -3246,14 +3246,20 @@ async def tg_monitor_loop():
         return
 
     session_path = os.path.join(DATA_DIR, "tg_monitor_session")
+    # Prefer session string from env var or config
+    session_str = os.environ.get("TG_SESSION", "") or cfg.get("session_string", "")
     try:
-        _tg_client = TelegramClient(session_path, int(api_id), api_hash)
+        from telethon.sessions import StringSession
+        if session_str:
+            _tg_client = TelegramClient(StringSession(session_str), int(api_id), api_hash)
+        else:
+            _tg_client = TelegramClient(session_path, int(api_id), api_hash)
+
         await _tg_client.connect()
 
-        # Check if already authorized — never prompt interactively (Railway has no terminal)
         if not await _tg_client.is_user_authorized():
             await _tg_client.disconnect()
-            await emit_log("❌ TG Monitor: Not logged in. Go to Settings → Telegram → Login & Connect first", "error")
+            await emit_log("❌ TG Monitor: Not logged in. Set TG_SESSION in Railway Variables", "error")
             return
 
         await emit_log(f"📡 TG Monitor: Connected! Watching channel: {channel}", "success")
