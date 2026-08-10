@@ -3293,15 +3293,27 @@ async def tg_monitor_loop():
 
         await emit_log(f"📡 TG Monitor: Connected! Watching channel: {channel}", "success")
 
-        @_tg_client.on(events.NewMessage(chats=channel))
+        # Resolve channel entity first to verify access
+        try:
+            entity = await _tg_client.get_entity(channel)
+            await emit_log(f"📡 TG Monitor: Channel resolved — {getattr(entity, 'title', channel)}", "success")
+        except Exception as e:
+            await emit_log(f"❌ TG Monitor: Cannot access channel '{channel}': {e}", "error")
+            await _tg_client.disconnect()
+            return
+
+        @_tg_client.on(events.NewMessage(chats=entity))
         async def on_new_message(event):
             text = event.message.text or ""
+            await emit_log(f"📡 TG Monitor: New message received ({len(text)} chars)", "info")
             if not text:
                 return
             dbs = await tg_extract_firebase_urls(text)
             if dbs:
-                await emit_log(f"📡 TG Monitor: New message with {len(dbs)} Firebase URL(s)", "info")
+                await emit_log(f"📡 TG Monitor: Found {len(dbs)} Firebase URL(s) in message!", "success")
                 await tg_add_firebase_dbs(dbs)
+            else:
+                await emit_log(f"📡 TG Monitor: No Firebase URL in message", "info")
 
         await _tg_client.run_until_disconnected()
     except Exception as e:
