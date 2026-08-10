@@ -3295,7 +3295,51 @@ async def tg_monitor_loop():
 
         # Resolve channel entity first to verify access
         try:
-            entity = await _tg_client.get_entity(channel)
+            # Try different formats for private channel ID
+            channel_input = channel.strip()
+            entity = None
+            errors = []
+
+            # Try as integer (private channel)
+            try:
+                channel_int = int(channel_input)
+                # Telethon needs the raw ID without -100 prefix for get_entity
+                from telethon.tl.types import PeerChannel
+                raw_id = abs(channel_int)
+                if str(raw_id).startswith("100"):
+                    raw_id = int(str(raw_id)[3:])
+                entity = await _tg_client.get_entity(PeerChannel(raw_id))
+            except Exception as e1:
+                errors.append(f"PeerChannel: {e1}")
+                # Try with full negative ID
+                try:
+                    entity = await _tg_client.get_entity(int(channel_input))
+                except Exception as e2:
+                    errors.append(f"int: {e2}")
+
+            # Try as username
+            if entity is None and channel_input.startswith("@"):
+                try:
+                    entity = await _tg_client.get_entity(channel_input)
+                except Exception as e3:
+                    errors.append(f"username: {e3}")
+
+            if entity is None:
+                await emit_log(f"❌ TG Monitor: Cannot access channel. Trying to get dialogs first...", "warn")
+                # Force-fetch dialogs so Telethon knows about this channel
+                async for dialog in _tg_client.iter_dialogs():
+                    if str(dialog.id) in channel_input or channel_input in str(dialog.id):
+                        entity = dialog.entity
+                        break
+                    if hasattr(dialog.entity, 'username') and dialog.entity.username and                        f"@{dialog.entity.username}" == channel_input:
+                        entity = dialog.entity
+                        break
+
+            if entity is None:
+                await emit_log(f"❌ TG Monitor: Channel not found. Make sure the account has joined or has messages from this channel. Errors: {'; '.join(errors)}", "error")
+                await _tg_client.disconnect()
+                return
+
             await emit_log(f"📡 TG Monitor: Channel resolved — {getattr(entity, 'title', channel)}", "success")
         except Exception as e:
             await emit_log(f"❌ TG Monitor: Cannot access channel '{channel}': {e}", "error")
