@@ -3156,30 +3156,45 @@ _tg_client = None
 _tg_monitor_task = None
 
 async def tg_extract_firebase_urls(text: str) -> list:
-    """Extract Firebase Realtime DB URLs from a message."""
+    """Extract Firebase URLs + Keys from channel messages.
+
+    Supports formats like:
+        🛰 URL: https://x-default-rtdb.firebaseio.com
+        🔑 Key: Abc123
+    or plain URLs on their own line.
+    """
     import re
-    patterns = [
-        r'https?://[a-zA-Z0-9_-]+-default-rtdb\.firebaseio\.com',
-        r'https?://[a-zA-Z0-9_-]+-default-rtdb\.[a-z0-9-]+\.firebasedatabase\.app',
-    ]
-    urls = []
-    for p in patterns:
-        urls += re.findall(p, text)
-    # Also try to extract auth key if present (format: url key or url\nkey)
     results = []
-    for url in set(urls):
-        url = url.rstrip('/')
-        # Look for key near the URL in text
+    seen_urls = set()
+
+    url_pattern = re.compile(
+        r'https?://[a-zA-Z0-9_-]+-default-rtdb(?:\.firebaseio\.com|\.[\w-]+\.firebasedatabase\.app)'
+    )
+    key_pattern = re.compile(
+        r'(?:🔑\s*)?[Kk]ey\s*[:\-]?\s*([A-Za-z0-9_\-]{2,40})'
+    )
+
+    lines = text.split('\n')
+    for i, line in enumerate(lines):
+        url_match = url_pattern.search(line)
+        if not url_match:
+            continue
+        url = url_match.group(0).rstrip('/')
+        if url in seen_urls:
+            continue
+        seen_urls.add(url)
+
+        # Look for key in current line or next 3 lines
         key = ""
-        idx = text.find(url)
-        if idx >= 0:
-            nearby = text[idx:idx+200]
-            key_match = re.search(r'[Kk]ey[:\s]+([A-Za-z0-9_-]{6,})', nearby)
-            if not key_match:
-                key_match = re.search(r'auth[:\s]+([A-Za-z0-9_-]{6,})', nearby)
-            if key_match:
-                key = key_match.group(1)
+        search_block = '\n'.join(lines[i:i+4])
+        key_match = key_pattern.search(search_block)
+        if key_match:
+            candidate = key_match.group(1).strip()
+            if 'http' not in candidate and len(candidate) >= 2:
+                key = candidate
+
         results.append({"url": url, "key": key})
+
     return results
 
 async def tg_add_firebase_dbs(new_dbs: list):
@@ -3233,7 +3248,14 @@ async def tg_monitor_loop():
     session_path = os.path.join(DATA_DIR, "tg_monitor_session")
     try:
         _tg_client = TelegramClient(session_path, int(api_id), api_hash)
-        await _tg_client.start(phone=phone)
+        await _tg_client.connect()
+
+        # Check if already authorized — never prompt interactively (Railway has no terminal)
+        if not await _tg_client.is_user_authorized():
+            await _tg_client.disconnect()
+            await emit_log("❌ TG Monitor: Not logged in. Go to Settings → Telegram → Login & Connect first", "error")
+            return
+
         await emit_log(f"📡 TG Monitor: Connected! Watching channel: {channel}", "success")
 
         @_tg_client.on(events.NewMessage(chats=channel))
