@@ -2043,3 +2043,87 @@ function initTgMonitor() {
 if (typeof socket !== 'undefined') {
     document.addEventListener('DOMContentLoaded', initTgMonitor);
 }
+
+/* ═══════════════════════════════════
+   FIREBASE BULK PASTE
+   ═══════════════════════════════════ */
+function toggleFirebaseBulk() {
+    const sec = document.getElementById('firebaseBulkSection');
+    if (!sec) return;
+    sec.style.display = sec.style.display === 'none' ? 'block' : 'none';
+}
+
+function clearFirebaseList() {
+    if (!confirm('Clear all Firebase databases from the list?')) return;
+    const list = document.getElementById('firebaseDbList');
+    if (list) list.innerHTML = '';
+}
+
+function parseBulkFirebase() {
+    const textarea = document.getElementById('firebaseBulkInput');
+    if (!textarea) return;
+
+    const lines = textarea.value.split('\n');
+    const urlPattern = /https?:\/\/[a-zA-Z0-9_-]+-default-rtdb(?:\.firebaseio\.com|\.[\w-]+\.firebasedatabase\.app)/;
+    const keyPattern = /(?:🔑\s*)?[Kk]ey\s*[:\-]?\s*([A-Za-z0-9_\-]{2,40})/;
+
+    let added = 0;
+    let skipped = 0;
+
+    // Get existing URLs to avoid duplicates
+    const existing = new Set();
+    document.querySelectorAll('#firebaseDbList .firebase-db-url').forEach(el => {
+        if (el.value.trim()) existing.add(el.value.trim());
+    });
+
+    // Group lines into blocks (each URL starts a block)
+    const blocks = [];
+    let currentBlock = [];
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) {
+            if (currentBlock.length) { blocks.push(currentBlock.join('\n')); currentBlock = []; }
+            continue;
+        }
+        if (urlPattern.test(trimmed) && currentBlock.length > 0) {
+            blocks.push(currentBlock.join('\n'));
+            currentBlock = [trimmed];
+        } else {
+            currentBlock.push(trimmed);
+        }
+    }
+    if (currentBlock.length) blocks.push(currentBlock.join('\n'));
+
+    for (const block of blocks) {
+        const urlMatch = urlPattern.exec(block);
+        if (!urlMatch) continue;
+
+        const url = urlMatch[0].trim().replace(/\/$/, '');
+        if (existing.has(url)) { skipped++; continue; }
+
+        // Extract key from same block
+        let key = '';
+        const keyMatch = keyPattern.exec(block);
+        if (keyMatch) {
+            const candidate = keyMatch[1].trim();
+            if (!candidate.includes('http') && candidate.length >= 2) {
+                key = candidate;
+            }
+        }
+
+        addFirebaseDbRow(url, key);
+        existing.add(url);
+        added++;
+    }
+
+    // Show result
+    const msg = `✅ Added ${added} database(s)${skipped ? `, skipped ${skipped} duplicates` : ''}.`;
+    addLog(msg, 'success');
+    textarea.value = '';
+    document.getElementById('firebaseBulkSection').style.display = 'none';
+
+    if (added > 0) {
+        // Scroll to list
+        document.getElementById('firebaseDbList')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}

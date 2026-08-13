@@ -348,7 +348,20 @@
                         <label>Firebase Databases</label>
                         <p class="setting-help">URL + Key (auth token) per database. Key is optional if database is public.</p>
                         <div id="firebaseDbList" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
-                        <button class="btn-secondary" onclick="addFirebaseDbRow('','')" style="width:100%;">+ Add Firebase Database</button>
+                        <div style="display:flex;gap:8px;">
+                            <button class="btn-secondary" onclick="addFirebaseDbRow('','')" style="flex:1;">+ Add One</button>
+                            <button class="btn-secondary" onclick="toggleFirebaseBulk()" style="flex:1;background:rgba(99,102,241,0.15);border-color:rgba(99,102,241,0.4);">📋 Bulk Paste</button>
+                            <button class="btn-secondary" onclick="clearFirebaseList()" style="flex:1;background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.3);color:#f87171;">🗑 Clear All</button>
+                        </div>
+                        <div id="firebaseBulkSection" style="display:none;margin-top:10px;">
+                            <p class="setting-help" style="margin-bottom:6px;">Paste panels below — one per line. Supported formats:<br>
+                            • <code>URL</code> only<br>
+                            • <code>URL KEY</code> (space separated)<br>
+                            • <code>URL: https://... Key: abc</code> (from Telegram channel)<br>
+                            • <code>🛰 URL: https://... 🔑 Key: abc</code></p>
+                            <textarea id="firebaseBulkInput" class="setting-input" rows="8" placeholder="https://project1-default-rtdb.firebaseio.com Abc123&#10;https://project2-default-rtdb.firebaseio.com&#10;URL: https://project3-default-rtdb.firebaseio.com Key: Xyz" style="resize:vertical;font-size:12px;font-family:monospace;"></textarea>
+                            <button class="btn-secondary" onclick="parseBulkFirebase()" style="width:100%;margin-top:8px;background:#22c55e;color:#fff;border:none;">✅ Parse & Add All</button>
+                        </div>
                     </div>
                 </div>
                 <!-- Proxies Tab -->
