@@ -2909,7 +2909,7 @@ async def _process_single_omkar_account(sid, account_line, omkar_txt_path, sem, 
             if not state.pw:
                 from playwright.async_api import async_playwright
                 state.pw = await async_playwright().start()
-                state.browser = await state.pw.chromium.launch(headless=False)
+                state.browser = await state.pw.chromium.launch(headless=True)  # Railway: no display
 
             context = await state.browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -3123,7 +3123,7 @@ async def process_omkar_generation(sid, accounts):
     if not state.pw:
         from playwright.async_api import async_playwright
         state.pw = await async_playwright().start()
-        state.browser = await state.pw.chromium.launch(headless=False)
+        state.browser = await state.pw.chromium.launch(headless=True)  # Railway: no display
 
     # Limit concurrency: max 3 accounts doing Grizzly phone verification at once
     sem = asyncio.Semaphore(3)
