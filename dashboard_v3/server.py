@@ -103,7 +103,7 @@ DEFAULT_CONFIG = {
     "saved_links": [],
     "otpsms_servers": ["1", "2", "5", "6", "7", "8", "9", "11", "12", "13", "33", "36", "71", "234", "458", "2344", "4566", "64653"],
     "uotp_servers": ["5", "3", "4", "2", "1", "8"],
-    "otpdoctor_services": ["13318", "13273"],
+    "otpdoctor_services": ["10549", "9322", "11572", "13209", "13273", "16061", "12855", "13318", "13276", "13734", "17786", "13735", "13265", "19821"],
     "omkar_keys": [k.strip() for k in os.environ.get("OMKAR_API_KEYS", "").split(",") if k.strip()],
     "omkar_usage": {},
     "timing": {
