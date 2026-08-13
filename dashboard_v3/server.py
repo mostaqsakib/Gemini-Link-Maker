@@ -919,13 +919,20 @@ async def process_number(p_name, aid, phone):
     order["carrier"] = carrier
     order_event(order, f"Carrier identified: {carrier}")
 
-    if "jio" in carrier.lower() or "reliance" in carrier.lower():
+    is_jio = "jio" in carrier.lower() or "reliance" in carrier.lower()
+    # If carrier is Unknown (Omkar API unavailable), treat as Jio for India-specific providers
+    if carrier == "Unknown" and p_name in ("OTPDoctor", "OTPSMS", "UOTP", "Grizzly", "TigerSMS", "MeowSMS"):
+        is_jio = True
+        carrier = "Jio (assumed)"
+
+    if is_jio:
         state.stats["jio"] += 1
         record_analytics_event(p_name, "jio")
         await emit_stats()
         order["status"] = "waiting_otp"
+        order["carrier"] = carrier
         await emit_order(order)
-        await emit_log(f"✓ [{p_name}] {phone}: {carrier} — TRUE JIO!", "success")
+        await emit_log(f"✓ [{p_name}] {phone}: {carrier} — proceeding!", "success")
 
         asyncio.create_task(handle_jio_number(order))
     else:
