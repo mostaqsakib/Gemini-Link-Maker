@@ -8,7 +8,7 @@
     <meta name="description" content="Real-time Rexovaan Gemini automation dashboard">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=v3-modal-footer-fix-20260810">
+    <link rel="stylesheet" href="/static/style.css?v=v4-premium-20260815">
 </head>
 
 <body>
@@ -118,27 +118,23 @@
             <div class="panel-section actions-section">
                 <button class="btn-primary btn-start" id="startBtn"><span class="btn-icon-left">🚀</span>
                     Sniping</button>
-                <button class="btn-warning hidden" id="pauseBtn" style="background: #f59e0b; width: 100%; display: flex; justify-content: center; padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; color: #000;"><span
+                <button class="btn-warning hidden" id="pauseBtn" ><span
                         class="btn-icon-left">⏸️</span> Pause</button>
-                <button class="btn-primary hidden" id="resumeBtn" style="background: #22c55e; width: 100%; display: flex; justify-content: center; padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; color: #fff;"><span
+                <button class="btn-primary hidden" id="resumeBtn" class="btn-action-green"><span
                         class="btn-icon-left">▶️</span> Resume</button>
                 <div id="pauseBanner" class="hidden" style="background: #dc2626; color: white; padding: 8px 12px; border-radius: 8px; margin-top: 8px; font-size: 13px; text-align: center;"></div>
-                <button class="btn-warning btn-stop hidden" id="stopBtn" style="background: #f59e0b; margin-top: 10px;"><span
+                <button class="btn-warning btn-stop hidden" id="stopBtn" ><span
                         class="btn-icon-left">■</span> Stop (Full Reset)</button>
                 <button class="btn-danger btn-stop hidden" id="forceStopBtn" style="margin-top: 10px;"><span
                         class="btn-icon-left">🛑</span> Force Stop</button>
-                <button class="btn-danger" id="killZombieBtn"
-                    style="margin-top: 10px; width: 100%; display: flex; justify-content: center; background: #dc2626;"><span
+                <button class="btn-danger" id="killZombieBtn"><span
                         class="btn-icon-left">🧹</span> Kill Zombie Browsers</button>
 
-                <button class="btn-secondary" id="openLinkCheckerModal"
-                    style="margin-top: 10px; width: 100%; display: flex; justify-content: center; background: #10b981; color: white; border: none;"><span
+                <button class="btn-secondary btn-action-green" id="openLinkCheckerModal"><span
                         class="btn-icon-left">🔗</span> Check Links</button>
-                <button class="btn-secondary" id="openApkExtractorModal"
-                    style="margin-top: 10px; width: 100%; display: flex; justify-content: center; background: #8b5cf6; color: white; border: none;"><span
+                <button class="btn-secondary btn-action-purple" id="openApkExtractorModal"><span
                         class="btn-icon-left">📱</span> APK / Link Extractor</button>
-                <button class="btn-secondary" id="retryOtpTimeoutsBtn"
-                    style="margin-top: 10px; width: 100%; display: flex; justify-content: center; background: #f97316; color: white; border: none;"><span
+                <button class="btn-secondary btn-action-orange" id="retryOtpTimeoutsBtn"><span
                         class="btn-icon-left">🔁</span> Retry OTP Timeouts</button>
             </div>
 
@@ -255,7 +251,7 @@
                     <div style="display: flex; justify-content: space-between;"><span>Speed (TPM):</span> <span id="progTPM" style="font-weight: 600; color: var(--accent-purple);">0</span></div>
                     <div style="display: flex; justify-content: space-between;"><span>ETA:</span> <span id="progETA" style="font-weight: 600; color: var(--status-success);">--:--</span></div>
                     <div style="background: var(--bg-input); height: 8px; border-radius: 4px; margin-top: 4px; overflow: hidden;">
-                        <div id="progBar" style="background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple)); width: 0%; height: 100%; transition: width 0.3s ease;"></div>
+                        <div id="progBar" style="background: var(--blue); width: 0%; height: 100%; transition: width 0.3s ease;"></div>
                     </div>
                 </div>
             </div>

@@ -599,7 +599,7 @@ function initModals() {
         const entry = document.createElement('div');
         entry.className = 'log-entry';
         const colors = { VALID: '#10b981', USED: '#ef4444', ERROR: '#f59e0b', UNKNOWN: '#6b7280', info: '#60a5fa' };
-        entry.style.color = colors[data.level] || 'var(--text-secondary)';
+        entry.style.color = colors[data.level] || 'var(--text-2)';
         entry.textContent = data.msg;
         log.appendChild(entry);
         log.scrollTop = log.scrollHeight;
@@ -705,7 +705,7 @@ function initModals() {
         if (log.querySelector('.log-empty')) log.innerHTML = '';
         const entry = document.createElement('div');
         entry.className = 'log-entry';
-        entry.style.color = color || 'var(--text-secondary)';
+        entry.style.color = color || 'var(--text-2)';
         entry.textContent = msg;
         log.appendChild(entry);
         log.scrollTop = log.scrollHeight;
@@ -734,13 +734,13 @@ function initModals() {
         dropZone.style.background = 'rgba(139, 92, 246, 0.1)';
     });
     dropZone.addEventListener('dragleave', () => {
-        dropZone.style.borderColor = 'var(--border-color)';
-        dropZone.style.background = 'var(--bg-primary)';
+        dropZone.style.borderColor = 'var(--border-2)';
+        dropZone.style.background = 'var(--bg-2)';
     });
     dropZone.addEventListener('drop', (e) => {
         e.preventDefault();
-        dropZone.style.borderColor = 'var(--border-color)';
-        dropZone.style.background = 'var(--bg-primary)';
+        dropZone.style.borderColor = 'var(--border-2)';
+        dropZone.style.background = 'var(--bg-2)';
         handleApkFiles(e.dataTransfer.files);
     });
     fileInput.addEventListener('change', () => handleApkFiles(fileInput.files));
@@ -947,7 +947,7 @@ function addTgCheckerLog(msg, level = 'info') {
         warn: '#f59e0b',
         info: '#60a5fa'
     };
-    entry.style.color = colors[level] || 'var(--text-secondary)';
+    entry.style.color = colors[level] || 'var(--text-2)';
     entry.textContent = msg;
     log.appendChild(entry);
     log.scrollTop = log.scrollHeight;
