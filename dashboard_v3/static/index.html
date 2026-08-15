@@ -8,7 +8,7 @@
     <meta name="description" content="Real-time Rexovaan Gemini automation dashboard">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=v4-panel-fix-20260815">
+    <link rel="stylesheet" href="/static/style.css?v=v4-gauge-fix-20260815">
 </head>
 
 <body>
@@ -22,27 +22,27 @@
             <!-- System Gauges -->
             <div class="gauge-group">
                 <div class="gauge" id="cpuGauge" title="CPU Usage">
-                    <svg viewBox="0 0 36 36" class="gauge-svg">
-                        <path class="gauge-bg"
+                    <svg viewBox="0 0 36 36" class="gauge-svg" fill="none">
+                        <path class="gauge-bg" fill="none"
                             d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                        <path class="gauge-fill gauge-fill-cpu" id="cpuFill" stroke-dasharray="0, 100"
+                        <path class="gauge-fill gauge-fill-cpu" fill="none" id="cpuFill" stroke-dasharray="0, 100"
                             d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                     </svg>
                     <div class="gauge-label">
                         <span class="gauge-value" id="cpuValue">0</span>
-                        <span class="gauge-unit" style="display:block;font-size:7px;color:var(--text-3);">CPU</span>
+                        <span class="gauge-unit">CPU</span>
                     </div>
                 </div>
                 <div class="gauge" id="ramGauge" title="RAM Usage">
-                    <svg viewBox="0 0 36 36" class="gauge-svg">
-                        <path class="gauge-bg"
+                    <svg viewBox="0 0 36 36" class="gauge-svg" fill="none">
+                        <path class="gauge-bg" fill="none"
                             d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                        <path class="gauge-fill gauge-fill-ram" id="ramFill" stroke-dasharray="0, 100"
+                        <path class="gauge-fill gauge-fill-ram" fill="none" id="ramFill" stroke-dasharray="0, 100"
                             d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
                     </svg>
                     <div class="gauge-label">
                         <span class="gauge-value" id="ramValue">0</span>
-                        <span class="gauge-unit" style="display:block;font-size:7px;color:var(--text-3);">RAM</span>
+                        <span class="gauge-unit">RAM</span>
                     </div>
                 </div>
             </div>
