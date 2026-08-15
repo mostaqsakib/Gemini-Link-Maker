@@ -8,7 +8,7 @@
     <meta name="description" content="Real-time Rexovaan Gemini automation dashboard">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=v4-gauge-fix-20260815">
+    <link rel="stylesheet" href="/static/style.css?v=v4-clean-20260815">
 </head>
 
 <body>
@@ -129,8 +129,7 @@
                 <button class="btn-danger" id="killZombieBtn"><span
                         class="btn-icon-left">🧹</span> Kill Zombie Browsers</button>
 
-                <button class="btn-secondary btn-action-green" id="openLinkCheckerModal"><span
-                        class="btn-icon-left">🔗</span> Check Links</button>
+
                 <button class="btn-secondary btn-action-purple" id="openApkExtractorModal"><span
                         class="btn-icon-left">📱</span> APK / Link Extractor</button>
                 <button class="btn-secondary btn-action-orange" id="retryOtpTimeoutsBtn"><span
@@ -146,7 +145,6 @@
                         id="orderCount">0</span></button>
                 <button class="tab-btn" data-tab="display">Display</button>
                 <button class="tab-btn" data-tab="links">Links <span class="order-count" id="tabLinkCount">0</span></button>
-                <button class="tab-btn" data-tab="checked-links">Checked Links <span class="order-count" id="tabCheckedLinkCount">0</span></button>
                 <button class="tab-btn" data-tab="proxies">Proxies <span class="order-count" id="tabProxyCount">0</span></button>
                 <button class="btn-icon tab-refresh" id="refreshOrders" title="Refresh">↻</button>
             </div>
@@ -181,10 +179,8 @@
             <div class="tab-content" id="tab-links">
                 <div class="display-toolbar">
                     <span>Saved Links: <strong id="linksTabCount">0</strong></span>
-                    <span class="link-check-summary">Live <strong class="count-live" id="linkCheckLive">0</strong> | Used <strong class="count-used" id="linkCheckUsed">0</strong> | Left <strong id="linkCheckLeft">0</strong></span>
                     <div class="toolbar-actions">
                         <button class="btn-secondary" id="copyAllSavedLinks">📋 Copy All</button>
-                        <button class="btn-secondary" id="checkAllSavedLinks">✅ Check All</button>
                         <button class="btn-secondary" id="downloadAndClearLinks" style="background:var(--accent-green,#10b981);color:#fff;">⬇️ Download & Clear</button>
                         <button class="btn-icon" id="refreshSavedLinks" title="Refresh">↻</button>
                     </div>
@@ -194,26 +190,6 @@
                         <div class="empty-icon">🔗</div>
                         <h3>No saved links</h3>
                         <p>Extracted links will appear here</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Checked Links Tab -->
-            <div class="tab-content" id="tab-checked-links">
-                <div class="display-toolbar">
-                    <span>Valid Checked Links: <strong id="checkedLinksTabCount">0</strong></span>
-                    <span class="link-check-summary">Live <strong class="count-live" id="checkedLinkLive">0</strong> | Used <strong class="count-used" id="checkedLinkUsed">0</strong> | Left <strong id="checkedLinkLeft">0</strong></span>
-                    <div class="toolbar-actions">
-                        <button class="btn-secondary" id="copyAllCheckedLinks">📋 Copy All</button>
-                        <button class="btn-secondary" id="checkAllCheckedLinks">✅ Check All</button>
-                        <button class="btn-icon" id="refreshCheckedLinks" title="Refresh">↻</button>
-                    </div>
-                </div>
-                <div class="links-container" id="checkedLinksContainer">
-                    <div class="empty-state">
-                        <div class="empty-icon">✅</div>
-                        <h3>No checked links</h3>
-                        <p>Valid links will appear here after auto-check</p>
                     </div>
                 </div>
             </div>
@@ -405,55 +381,6 @@
                 <h3 class="detail-section-title">Lifecycle Timeline</h3>
                 <div class="timeline" id="detailTimeline"></div>
                 <div class="detail-actions" id="detailActions"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Email Converter Modal -->
-    <!-- Link Checker Modal -->
-    <div class="modal-overlay hidden" id="linkCheckerModal">
-        <div class="modal" style="max-width: 700px;">
-            <div class="modal-header">
-                <h2> Link Checker</h2>
-                <button class="btn-icon modal-close" id="closeLinkCheckerModal">Close</button>
-            </div>
-            <div class="modal-body" style="display: flex; flex-direction: column; gap: 12px;">
-                <p style="font-size: 14px; color: var(--text-secondary);">Paste Google subscription links (one per line). Uses persistent Google login to check validity.</p>
-                <textarea id="linkCheckerInput"
-                    placeholder="https://serviceactivation.google.com/subscription/new/AQCpiIG...&#10;https://one.google.com/activate-plan/subscription/new/AQCpiIG...&#10;&#10;Or leave empty to check all from extracted_links.csv"
-                    style="width: 100%; height: 120px; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 10px; border-radius: 6px; font-family: monospace; font-size: 12px; resize: vertical;"></textarea>
-
-                <div style="display: flex; gap: 8px; align-items: center;">
-                    <button class="btn-secondary hidden" id="loginLinkChecker" style="padding: 10px;">Login Google</button>
-                    <button class="btn-secondary" id="loginTgChecker" style="padding: 10px;">Login TG</button>
-                    <button class="btn-primary" id="startTgCheck" style="flex: 1; padding: 10px;">TG Check</button>
-                    <button class="btn-primary hidden" id="startLinkCheck" style="flex: 1; padding: 10px;"> Check Links</button>
-                    <button class="btn-danger hidden" id="stopLinkCheck" style="flex: 1; padding: 10px;"> Stop</button>
-                    <div id="linkCheckProgress" style="font-size: 13px; color: var(--text-secondary); min-width: 120px; text-align: right;"></div>
-                </div>
-                <div id="tgLoginBox" class="hidden" style="display: flex; gap: 8px; align-items: center;">
-                    <input id="tgLoginCode" class="setting-input" placeholder="Telegram code" style="flex: 1;">
-                    <input id="tgLoginPassword" class="setting-input" placeholder="2FA password if any" type="password" style="flex: 1;">
-                    <button class="btn-primary" id="verifyTgChecker" style="padding: 10px 16px;">Verify</button>
-                </div>
-
-                <div class="log-container" id="linkCheckLog" style="height: 180px; font-size: 12px;">
-                    <div class="log-empty">Paste links above or leave empty, then click TG Check...</div>
-                </div>
-
-                <div id="linkCheckResults" style="display: none;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                        <span style="font-size: 14px; font-weight: 600; color: var(--text-primary);">
-                             Valid Links (<span id="validLinkCount">0</span>)
-                        </span>
-                        <button class="btn-primary" id="copyValidLinks" style="padding: 6px 14px; font-size: 12px;"> Copy Valid Links</button>
-                    </div>
-                    <textarea id="validLinksOutput" readonly
-                        style="width: 100%; height: 100px; background: var(--bg-primary); border: 1px solid #10b981; color: #10b981; padding: 10px; border-radius: 6px; font-family: monospace; font-size: 11px; resize: vertical;"></textarea>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn-secondary" id="cancelLinkCheckerModal">Close</button>
             </div>
         </div>
     </div>

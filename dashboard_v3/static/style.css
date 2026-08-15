@@ -1129,3 +1129,8 @@ textarea.setting-input { resize: vertical; line-height: 1.5; min-height: 80px; }
 @media (min-width: 769px) {
   .mobile-bottom-bar { display: none !important; }
 }
+
+/* ── Order Timer ── */
+.order-timer-svg { width: 28px; height: 28px; transform: rotate(-90deg); flex-shrink: 0; }
+.order-timer-bg { fill: none; stroke: var(--bg-4); stroke-width: 2.5; }
+.order-timer-fill { fill: none; stroke: var(--blue); stroke-width: 2.5; stroke-linecap: round; transition: stroke-dasharray 1s linear; }

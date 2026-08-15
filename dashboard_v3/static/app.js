@@ -4,9 +4,6 @@ let batchCount = 1;
 let selectedProviders = ['FirebaseDirect'];
 let orders = {};
 let savedLinks = [];
-let checkedLinks = [];
-let linkCheckStatus = {};
-let linkCheckStats = { live: 0, used: 0, expired: 0, invalid: 0, error: 0, left: 0, total: 0 };
 let proxyRows = [];
 let proxyResults = {};
 let settingsData = {};
@@ -41,7 +38,6 @@ function initSocket() {
         addLog('Connected to server', 'info');
         socket.emit('get_balances');
         loadSavedLinks();
-        loadCheckedLinks();
         loadProxyList();
     });
     socket.on('disconnect', () => {
@@ -128,17 +124,11 @@ function initSocket() {
     });
     socket.on('link_stats', (data) => {
         updateLinkCounters(data.count || 0);
-        updateCheckedLinkCounters(data.checked || 0);
     });
     socket.on('link_saved', (data) => {
         if (data.link && !savedLinks.includes(data.link)) savedLinks.unshift(data.link);
         updateLinkCounters(data.count || savedLinks.length);
         if (document.getElementById('tab-links')?.classList.contains('active')) renderSavedLinks();
-    });
-    socket.on('checked_link_saved', (data) => {
-        if (data.link && !checkedLinks.includes(data.link)) checkedLinks.unshift(data.link);
-        updateCheckedLinkCounters(data.count || checkedLinks.length);
-        if (document.getElementById('tab-checked-links')?.classList.contains('active')) renderCheckedLinks();
     });
 
     socket.on('batch_progress', (data) => {
@@ -452,7 +442,6 @@ function initTabs() {
             if (tab) tab.classList.add('active');
             if (btn.dataset.tab === 'display') renderProcessDisplay();
             if (btn.dataset.tab === 'links') loadSavedLinks();
-            if (btn.dataset.tab === 'checked-links') loadCheckedLinks();
             if (btn.dataset.tab === 'proxies') loadProxyList();
         });
     });
@@ -522,15 +511,7 @@ function initModals() {
     });
 
     // Link Checker
-    document.getElementById('openLinkCheckerModal').addEventListener('click', () => {
-        document.getElementById('linkCheckerModal').classList.remove('hidden');
-    });
-    document.getElementById('closeLinkCheckerModal').addEventListener('click', () => {
-        document.getElementById('linkCheckerModal').classList.add('hidden');
-    });
-    document.getElementById('cancelLinkCheckerModal').addEventListener('click', () => {
-        document.getElementById('linkCheckerModal').classList.add('hidden');
-    });
+
     document.getElementById('startLinkCheck').addEventListener('click', () => {
         const input = document.getElementById('linkCheckerInput').value.trim();
         const links = input ? input.split('\n').map(l => l.trim()).filter(l => l.startsWith('http')) : [];
