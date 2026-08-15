@@ -1177,10 +1177,18 @@ async function loadSavedLinks() {
     try {
         const resp = await fetch('/api/links', { cache: 'no-store' });
         const data = await resp.json();
-        savedLinks = data.links || [];
-        updateLinkCounters(data.count || savedLinks.length);
+        const serverLinks = data.links || [];
+        // Merge server links with any received via socket (deduplicate)
+        const merged = [...serverLinks];
+        for (const l of savedLinks) {
+            if (l && !merged.includes(l)) merged.unshift(l);
+        }
+        savedLinks = merged;
+        updateLinkCounters(savedLinks.length);
         renderSavedLinks();
     } catch (err) {
+        // Even if fetch fails, render what we have from socket
+        renderSavedLinks();
         addLog(`Failed to load saved links: ${err.message}`, 'error');
     }
 }
