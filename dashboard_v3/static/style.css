@@ -113,7 +113,7 @@ html, body {
   justify-content: center;
 }
 .gauge-value { font-size: 9px; font-weight: 700; line-height: 1; color: var(--text-1); }
-.gauge-unit { display: none; }
+.gauge-unit { display: block; font-size: 7px; color: var(--text-3); line-height: 1; }
 
 /* Status indicator */
 .status-indicator {

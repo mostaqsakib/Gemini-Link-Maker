@@ -8,7 +8,7 @@
     <meta name="description" content="Real-time Rexovaan Gemini automation dashboard">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css?v=v4-premium-20260815">
+    <link rel="stylesheet" href="/static/style.css?v=v4-fixes-20260815">
 </head>
 
 <body>
@@ -17,7 +17,6 @@
         <div class="top-bar-left">
             <div class="logo"><img src="/static/luffy_prime_logo.jpg" alt="Rexovaan Gemini"></div>
             <h1>Rexovaan Gemini</h1>
-            <span class="version">v3</span>
         </div>
         <div class="top-bar-center">
             <!-- System Gauges -->
@@ -31,7 +30,7 @@
                     </svg>
                     <div class="gauge-label">
                         <span class="gauge-value" id="cpuValue">0</span>
-                        <span class="gauge-unit">% CPU</span>
+                        <span class="gauge-unit" style="display:block;font-size:7px;color:var(--text-3);">CPU</span>
                     </div>
                 </div>
                 <div class="gauge" id="ramGauge" title="RAM Usage">
@@ -43,7 +42,7 @@
                     </svg>
                     <div class="gauge-label">
                         <span class="gauge-value" id="ramValue">0</span>
-                        <span class="gauge-unit">% RAM</span>
+                        <span class="gauge-unit" style="display:block;font-size:7px;color:var(--text-3);">RAM</span>
                     </div>
                 </div>
             </div>
@@ -107,10 +106,10 @@
                 </div>
                 <div class="batch-control">
                     <label class="control-label">OTP Delay <span class="deep-scan-hint">(seconds)</span></label>
-                    <div style="display: flex; align-items: center; gap: 10px; background: var(--bg-input); border-radius: 8px; padding: 4px;">
-                        <button class="count-btn" id="delayDown" style="flex:1;">-</button>
-                        <span id="otpDelayDisplay" style="font-size: 16px; font-weight: 600; width: 40px; text-align: center;">4</span>
-                        <button class="count-btn" id="delayUp" style="flex:1;">+</button>
+                    <div class="count-selector">
+                        <button class="count-btn" id="delayDown">-</button>
+                        <span class="count-value" id="otpDelayDisplay">4</span>
+                        <button class="count-btn" id="delayUp">+</button>
                     </div>
                 </div>
             </div>
