@@ -1200,7 +1200,6 @@ function renderSavedLinks() {
             <div class="link-actions">
                 ${renderLinkStatusBadge(link, false)}
                 <button class="btn-secondary btn-copy-link" data-link="${escapeAttr(link)}">Copy</button>
-                <button class="btn-secondary btn-check-link" data-link="${escapeAttr(link)}">Check</button>
                 <button class="btn-secondary btn-open-link" data-link="${escapeAttr(link)}">Open</button>
                 <button class="btn-link-delete" data-list="saved" data-link="${escapeAttr(link)}" title="Delete link">×</button>
             </div>
@@ -1236,7 +1235,6 @@ function renderCheckedLinks() {
             <div class="link-actions">
                 ${renderLinkStatusBadge(link, true)}
                 <button class="btn-secondary btn-copy-link" data-link="${escapeAttr(link)}">Copy</button>
-                <button class="btn-secondary btn-check-link" data-link="${escapeAttr(link)}">Check</button>
                 <button class="btn-secondary btn-open-link" data-link="${escapeAttr(link)}">Open</button>
                 <button class="btn-link-delete" data-list="checked" data-link="${escapeAttr(link)}" title="Delete link">×</button>
             </div>

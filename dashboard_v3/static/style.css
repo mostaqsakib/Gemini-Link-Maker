@@ -508,115 +508,170 @@ html, body {
 .tab-content.active { display: flex; flex-direction: column; }
 
 /* ════════════════════════════════
-   ORDER CARDS
+   ORDER CARDS — Premium
    ════════════════════════════════ */
-.orders-container { display: flex; flex-direction: column; gap: 8px; }
+.orders-container { display: flex; flex-direction: column; gap: 6px; }
 
 .order-card {
+  position: relative;
   background: var(--bg-2);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 12px;
+  padding: 12px 14px;
   cursor: pointer;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, background 0.15s;
+  overflow: hidden;
 }
-.order-card:hover { border-color: var(--border-2); }
+.order-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--border-2);
+  border-radius: 3px 0 0 3px;
+  transition: background 0.2s;
+}
+.order-card:hover { border-color: var(--border-2); background: var(--bg-3); }
+.order-card.status-waiting-otp::before { background: var(--amber); }
+.order-card.status-jio::before { background: var(--blue); }
+.order-card.status-login-success::before { background: var(--green); }
+.order-card.status-non-jio::before { background: var(--red); }
 
-.order-header {
+/* Top row */
+.order-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.order-phone-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.order-phone {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+  letter-spacing: -0.01em;
+  font-family: monospace;
+}
+.order-time { font-size: 10px; color: var(--text-3); white-space: nowrap; flex-shrink: 0; }
+
+/* Badge */
+.order-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+.badge-waiting-sms { background: var(--amber-bg); color: var(--amber); border: 1px solid rgba(251,191,36,0.2); }
+.badge-otp-received { background: var(--blue-bg); color: var(--blue); border: 1px solid var(--blue-border); }
+.badge-logging-in { background: var(--purple-bg); color: var(--purple); border: 1px solid rgba(167,139,250,0.2); }
+.badge-logged-in, .badge-extract { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+.badge-non-jio, .badge-cancelling { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
+.badge-jio { background: var(--blue-bg); color: var(--blue); border: 1px solid var(--blue-border); }
+
+/* Meta row */
+.order-meta {
   display: flex;
   align-items: center;
   gap: 10px;
+  font-size: 10px;
+  color: var(--text-3);
   margin-bottom: 8px;
 }
-.order-phone {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-1);
-  flex: 1;
-}
-.order-time { font-size: 10px; color: var(--text-3); }
-.order-id-chip {
-  font-size: 9px;
-  color: var(--text-3);
-  background: var(--bg-4);
-  padding: 2px 6px;
-  border-radius: 4px;
-}
+.order-provider { display: flex; align-items: center; gap: 5px; }
 
-.order-details {
+/* Status bar */
+.order-status-bar {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
-  color: var(--text-2);
   margin-bottom: 8px;
 }
-
-/* Status badges */
-.status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+.status-text {
+  font-size: 11px;
+  color: var(--text-2);
+  flex: 1;
+  line-height: 1.3;
 }
-.status-fetched { background: var(--bg-4); color: var(--text-3); }
-.status-waiting_otp, .status-waiting-sms { background: var(--amber-bg); color: var(--amber); }
-.status-otp_received { background: var(--blue-bg); color: var(--blue); }
-.status-logging_in, .status-logging-in { background: var(--purple-bg); color: var(--purple); }
-.status-logged_in, .status-extract_link { background: var(--green-bg); color: var(--green); }
-.status-cancelled, .status-non_jio, .status-non-jio { background: var(--red-bg); color: var(--red); }
-.status-cancelling { background: var(--red-bg); color: var(--red); opacity: 0.7; }
+.status-dots { display: flex; gap: 3px; }
+.status-dots span {
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: var(--blue);
+  animation: blink 1.2s infinite;
+}
+.status-dots span:nth-child(2) { animation-delay: 0.2s; }
+.status-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes blink { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
+
+.progress-bar {
+  width: 100%;
+  height: 3px;
+  background: var(--bg-4);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--blue);
+  border-radius: 2px;
+  transition: width 0.6s ease;
+}
+.order-card.status-login-success .progress-fill { background: var(--green); }
+.order-card.status-non-jio .progress-fill { background: var(--red); }
 
 /* OTP display */
 .order-otp {
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: 0.15em;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 0.18em;
   color: var(--text-1);
   text-align: center;
-  padding: 8px 0;
-  font-family: 'Inter', monospace;
+  padding: 10px 0 6px;
+  font-family: monospace;
 }
 
-/* Progress bar */
-.order-progress {
-  height: 2px;
-  background: var(--bg-4);
-  border-radius: 1px;
-  overflow: hidden;
-  margin-bottom: 8px;
+/* Actions */
+.order-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
 }
-.order-progress-fill {
-  height: 100%;
-  background: var(--blue);
-  border-radius: 1px;
-  transition: width 1s linear;
+.order-id {
+  margin-left: auto;
+  font-size: 9px;
+  color: var(--text-3);
+  font-family: monospace;
 }
-.order-progress-fill.green { background: var(--green); }
-.order-progress-fill.amber { background: var(--amber); }
-
-/* Order actions */
-.order-actions { display: flex; gap: 6px; }
-.btn-order-action {
-  flex: 1;
-  padding: 5px;
+.btn-cancel, .btn-force-cancel, .btn-copy-otp, .btn-repoll {
+  padding: 4px 10px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--bg-3);
   color: var(--text-2);
   cursor: pointer;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
-  transition: background 0.12s, color 0.12s;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
-.btn-order-action:hover { background: var(--bg-4); color: var(--text-1); }
-.btn-order-action.cancel { color: var(--red); border-color: var(--red-border); }
-.btn-order-action.copy { color: var(--blue); border-color: var(--blue-border); }
+.btn-cancel { color: var(--red); border-color: var(--red-border); background: var(--red-bg); }
+.btn-cancel:hover { opacity: 0.8; }
+.btn-force-cancel { color: var(--red); border-color: var(--red-border); }
+.btn-copy-otp { color: var(--blue); border-color: var(--blue-border); background: var(--blue-bg); }
+.btn-copy-otp:hover { opacity: 0.8; }
+.btn-repoll:hover { color: var(--text-1); border-color: var(--border-2); }
+
+/* Timer */
+.order-timer-container {
+  position: absolute;
+  top: 10px; right: 10px;
+}
 
 /* ════════════════════════════════
    EMPTY STATES
