@@ -174,11 +174,17 @@ def load_config():
                 # Keep saved_links from saved config (persists across restarts)
                 if "saved_links" not in merged:
                     merged["saved_links"] = []
-                # Always prefer PROXY_URLS env var over saved config
-                if DEFAULT_CONFIG["proxies"]:
-                    merged["proxies"] = DEFAULT_CONFIG["proxies"]
-                elif "proxies" not in merged:
-                    merged["proxies"] = []
+                # Merge PROXY_URLS env var with saved proxies (env + Settings combined)
+                env_proxies = DEFAULT_CONFIG["proxies"]
+                saved_proxies = merged.get("proxies", [])
+                # Deduplicate while preserving order (env first)
+                seen = set()
+                all_proxies = []
+                for p in (env_proxies + saved_proxies):
+                    if p and p not in seen:
+                        seen.add(p)
+                        all_proxies.append(p)
+                merged["proxies"] = all_proxies
                 return merged
         except:
             pass
