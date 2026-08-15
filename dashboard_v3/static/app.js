@@ -1174,20 +1174,23 @@ function renderProcessDisplay() {
 }
 
 async function loadSavedLinks() {
+    // Immediately render what we already have in memory
+    if (savedLinks.length) renderSavedLinks();
+    
     try {
         const resp = await fetch('/api/links', { cache: 'no-store' });
         const data = await resp.json();
         const serverLinks = data.links || [];
-        // Merge server links with any received via socket (deduplicate)
+        // Merge: put server links first, then add any socket-only links
+        const seen = new Set(serverLinks);
         const merged = [...serverLinks];
         for (const l of savedLinks) {
-            if (l && !merged.includes(l)) merged.unshift(l);
+            if (l && !seen.has(l)) { merged.push(l); seen.add(l); }
         }
         savedLinks = merged;
         updateLinkCounters(savedLinks.length);
         renderSavedLinks();
     } catch (err) {
-        // Even if fetch fails, render what we have from socket
         renderSavedLinks();
         addLog(`Failed to load saved links: ${err.message}`, 'error');
     }

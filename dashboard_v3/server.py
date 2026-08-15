@@ -2061,13 +2061,7 @@ async def process_firebase_number(device_id, phone, fb_url, speed_delay, attempt
             await emit_log(f"🎉 [{phone}] Gemini Link Saved! ", "success")
 
             # Emit link_saved so frontend Links tab updates in real-time
-            link_count = 0
-            if os.path.exists(SUCCESS_CSV):
-                try:
-                    with open(SUCCESS_CSV, "r") as f:
-                        link_count = sum(1 for _ in csv.reader(f))
-                except Exception:
-                    pass
+            link_count = len(config.get("saved_links", []))
             await sio.emit("link_saved", {
                 "phone": "+91" + clean_phone,
                 "link": target_link,
