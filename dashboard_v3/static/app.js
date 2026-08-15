@@ -1391,13 +1391,7 @@ function updateLinkCounters(count) {
     if (list) list.textContent = value;
 }
 
-function updateCheckedLinkCounters(count) { return; // removed
-    const value = count || 0;
-    const tab = document.getElementById('tabCheckedLinkCount');
-    const list = document.getElementById('checkedLinksTabCount');
-    if (tab) tab.textContent = value;
-    if (list) list.textContent = value;
-}
+function updateCheckedLinkCounters(count) { /* removed */ }
 
 async function loadProxyList() {
     try {

@@ -251,6 +251,29 @@ html, body {
 }
 .provider-card.selected .provider-dot { background: var(--blue); }
 
+/* Provider checkbox (selection indicator) */
+.provider-checkbox {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--bg-4);
+  border: 1px solid var(--border-2);
+  flex-shrink: 0;
+  margin-top: 3px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.provider-card.selected .provider-checkbox {
+  background: var(--blue);
+  border-color: var(--blue-border);
+}
+
+/* Provider service label */
+.provider-service {
+  font-size: 10px;
+  color: var(--text-3);
+  margin-top: 1px;
+  line-height: 1.3;
+}
+
 .provider-info { flex: 1; min-width: 0; }
 .provider-name {
   font-size: 12px;
@@ -782,12 +805,6 @@ html, body {
 .progress-label { color: var(--text-2); }
 .progress-value { font-weight: 600; color: var(--text-1); }
 .progress-bar-wrap { height: 4px; background: var(--bg-4); border-radius: 2px; overflow: hidden; margin-top: 4px; }
-.progress-bar {
-  height: 100%;
-  background: var(--blue);
-  border-radius: 2px;
-  transition: width 0.4s ease;
-}
 
 /* ════════════════════════════════
    ACTIVITY LOG
