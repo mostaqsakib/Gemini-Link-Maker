@@ -490,46 +490,7 @@ function initControls() {
     const submitChatGptBtn = document.getElementById('submitChatGptModal');
     const stopChatGptBtn = document.getElementById('stopChatGptModal');
 
-    // Email Converter Modal bindings
-    const emailConverterModal = document.getElementById('emailConverterModal');
-    if (document.getElementById('openEmailConverterModal')) {
-        document.getElementById('openEmailConverterModal').addEventListener('click', () => {
-            emailConverterModal.classList.remove('hidden');
-        });
-    }
-    const closeEmailConverter = () => emailConverterModal.classList.add('hidden');
-    if (document.getElementById('closeEmailConverterModal')) {
-        document.getElementById('closeEmailConverterModal').addEventListener('click', closeEmailConverter);
-        document.getElementById('cancelEmailConverterModal').addEventListener('click', closeEmailConverter);
-    }
-    if (document.getElementById('convertEmailsBtn')) {
-        document.getElementById('convertEmailsBtn').addEventListener('click', () => {
-            const input = document.getElementById('emailConverterInput').value;
-            const format = document.getElementById('emailConverterFormat').value;
-            const lines = input.split('\n');
-            const result = [];
 
-            for (let line of lines) {
-                line = line.trim();
-                if (!line) continue;
-                const parts = line.split('|');
-                if (parts.length >= 4) {
-                    const email = parts[0].trim();
-                    const password = parts[1].trim();
-                    const refreshToken = parts[2].trim();
-                    const clientId = parts[3].trim();
-
-                    let link = format.replace(/{email}/g, email)
-                        .replace(/{password}/g, password)
-                        .replace(/{refresh_token}/g, refreshToken)
-                        .replace(/{client_id}/g, clientId);
-
-                    result.push(`${email} | ${password} | ${link}`);
-                }
-            }
-            document.getElementById('emailConverterOutput').value = result.join('\n');
-        });
-    }
 
     submitChatGptBtn.addEventListener('click', () => {
         const numTabsStr = document.getElementById('chatGptNumTabs').value.trim();

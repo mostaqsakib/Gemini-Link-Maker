@@ -237,42 +237,6 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 # Security token matching the one in the Cloudflare Worker
 WEBHOOK_SECRET = "YOUR_SECRET_TOKEN"
 
-@app.post("/api/incoming-email")
-async def receive_incoming_email(request: Request):
-    # 1. Verify the security token
-    auth_header = request.headers.get("Authorization")
-    if auth_header != f"Bearer {WEBHOOK_SECRET}":
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-    # 2. Parse the JSON from Cloudflare
-    data = await request.json()
-    from_address = data.get("from")
-    to_address = data.get("to")
-    subject = data.get("subject")
-    raw_email_str = data.get("raw_email")
-
-    print(f"📧 New Email Received from {from_address} | Subject: {subject}")
-
-    # 3. Parse the raw email to get the plain text body
-    if raw_email_str:
-        msg = email.message_from_string(raw_email_str, policy=policy.default)
-        body_text = ""
-
-        if msg.is_multipart():
-            for part in msg.walk():
-                content_type = part.get_content_type()
-                content_disposition = str(part.get("Content-Disposition"))
-
-                if content_type == "text/plain" and "attachment" not in content_disposition:
-                    body_text = part.get_payload(decode=True).decode(part.get_content_charset() or 'utf-8')
-                    break
-        else:
-            body_text = msg.get_payload(decode=True).decode(msg.get_content_charset() or 'utf-8')
-
-        print(f"Body snippet: {body_text.strip()[:100]}...")
-        # You can add regex here to extract data from body_text
-
-    return JSONResponse(content={"status": "success", "message": "Email processed"})
 
 @app.get("/")
 async def index():
