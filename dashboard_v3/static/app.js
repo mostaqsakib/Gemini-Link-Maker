@@ -11,8 +11,6 @@ let proxyRows = [];
 let proxyResults = {};
 let settingsData = {};
 let currentDetailOrderId = null;
-let providerChart = null;
-let timelineChart = null;
 
 const PROVIDERS = {
     FirebaseDirect: { name: 'Firebase Direct', service: 'firebase', dotClass: 'dot-jio' },
@@ -222,7 +220,6 @@ function initSocket() {
     socket.on('settings_saved', () => addLog('Settings saved successfully', 'success'));
 
     // Analytics
-    socket.on('analytics_data', (data) => renderAnalytics(data));
 
     // Order detail
     socket.on('order_detail', (data) => openOrderDetail(data));
@@ -441,92 +438,7 @@ function initControls() {
     });
     document.getElementById('refreshOrders').addEventListener('click', () => socket.emit('get_orders'));
 
-    // Get API Modal bindings
-    const getApiModal = document.getElementById('getApiModal');
-    document.getElementById('openGetApiModal').addEventListener('click', () => {
-        getApiModal.classList.remove('hidden');
-    });
-    const closeGetApi = () => getApiModal.classList.add('hidden');
-    document.getElementById('closeGetApiModal').addEventListener('click', closeGetApi);
-    document.getElementById('cancelGetApiModal').addEventListener('click', closeGetApi);
 
-    const submitBtn = document.getElementById('submitGetApiModal');
-    const stopBtn = document.getElementById('stopGetApiModal');
-
-    submitBtn.addEventListener('click', () => {
-        const text = document.getElementById('outlookAccountsTextarea').value.trim();
-        if (!text) {
-            alert("Please paste Outlook accounts first.");
-            return;
-        }
-        document.getElementById('omkarGenLog').innerHTML = '<div class="log-empty">Starting automation...</div>';
-        const accounts = text.split('\n').filter(l => l.trim().length > 0);
-
-        submitBtn.classList.add('hidden');
-        stopBtn.classList.remove('hidden');
-        socket.emit('generate_omkar_keys', { accounts });
-    });
-
-    stopBtn.addEventListener('click', () => {
-        socket.emit('stop_omkar_generation');
-        stopBtn.classList.add('hidden');
-        submitBtn.classList.remove('hidden');
-    });
-
-    socket.on('omkar_gen_done', () => {
-        stopBtn.classList.add('hidden');
-        submitBtn.classList.remove('hidden');
-    });
-
-    // ChatGPT Login Modal bindings
-    const chatGptModal = document.getElementById('chatGptModal');
-    document.getElementById('openChatGptModal').addEventListener('click', () => {
-        chatGptModal.classList.remove('hidden');
-    });
-    const closeChatGpt = () => chatGptModal.classList.add('hidden');
-    document.getElementById('closeChatGptModal').addEventListener('click', closeChatGpt);
-    document.getElementById('cancelChatGptModal').addEventListener('click', closeChatGpt);
-
-    const submitChatGptBtn = document.getElementById('submitChatGptModal');
-    const stopChatGptBtn = document.getElementById('stopChatGptModal');
-
-
-
-    submitChatGptBtn.addEventListener('click', () => {
-        const numTabsStr = document.getElementById('chatGptNumTabs').value.trim();
-        const numTabs = parseInt(numTabsStr, 10);
-        if (isNaN(numTabs) || numTabs < 1) {
-            alert("Please enter a valid number of tabs.");
-            return;
-        }
-        document.getElementById('chatGptLog').innerHTML = '<div class="log-empty">Starting login...</div>';
-
-        submitChatGptBtn.classList.add('hidden');
-        stopChatGptBtn.classList.remove('hidden');
-        socket.emit('start_chatgpt_login', { num_tabs: numTabs });
-    });
-
-    stopChatGptBtn.addEventListener('click', () => {
-        socket.emit('stop_chatgpt_login');
-        stopChatGptBtn.classList.add('hidden');
-        submitChatGptBtn.classList.remove('hidden');
-    });
-
-    socket.on('chatgpt_login_done', () => {
-        stopChatGptBtn.classList.add('hidden');
-        submitChatGptBtn.classList.remove('hidden');
-    });
-
-    socket.on('chatgpt_log', (data) => {
-        const c = document.getElementById('chatGptLog');
-        if (!c) return;
-        const e = c.querySelector('.log-empty');
-        if (e) e.remove();
-        const el = document.createElement('div');
-        el.className = `log-entry log-${data.level || 'info'}`;
-        el.innerHTML = `<span class="log-time">${new Date().toLocaleTimeString()}</span> <span class="log-msg">${data.msg}</span>`;
-        c.insertBefore(el, c.firstChild);
-    });
 }
 
 //  Tabs 
@@ -538,7 +450,6 @@ function initTabs() {
             btn.classList.add('active');
             const tab = document.getElementById(`tab-${btn.dataset.tab}`);
             if (tab) tab.classList.add('active');
-            if (btn.dataset.tab === 'analytics') socket.emit('get_analytics');
             if (btn.dataset.tab === 'display') renderProcessDisplay();
             if (btn.dataset.tab === 'links') loadSavedLinks();
             if (btn.dataset.tab === 'checked-links') loadCheckedLinks();
@@ -1675,105 +1586,6 @@ function safe(order) {
 }
 
 //  Analytics 
-function renderAnalytics(data) {
-    const events = data.events || [];
-    renderProviderChart(events);
-    renderTimelineChart(events);
-    renderCostTable(events);
-}
-
-function renderProviderChart(events) {
-    const stats = {};
-    for (const p of Object.keys(PROVIDERS)) stats[p] = { fetched: 0, jio: 0, otp: 0, login: 0 };
-    events.forEach(e => { if (stats[e.p] && stats[e.p][e.e] !== undefined) stats[e.p][e.e]++; });
-
-    const labels = Object.keys(stats);
-    const datasets = [
-        { label: 'Fetched', data: labels.map(l => stats[l].fetched), backgroundColor: 'rgba(59,130,246,0.7)' },
-        { label: 'Jio', data: labels.map(l => stats[l].jio), backgroundColor: 'rgba(34,197,94,0.7)' },
-        { label: 'OTP', data: labels.map(l => stats[l].otp), backgroundColor: 'rgba(6,182,212,0.7)' },
-        { label: 'Login', data: labels.map(l => stats[l].login), backgroundColor: 'rgba(139,92,246,0.7)' }
-    ];
-
-    const ctx = document.getElementById('providerChart');
-    if (providerChart) providerChart.destroy();
-    providerChart = new Chart(ctx, {
-        type: 'bar',
-        data: { labels, datasets },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } },
-            scales: {
-                x: { ticks: { color: '#64748b' }, grid: { color: '#1e293b' } },
-                y: { ticks: { color: '#64748b' }, grid: { color: '#1e293b' } }
-            }
-        }
-    });
-}
-
-function renderTimelineChart(events) {
-    // Group events into 30-min buckets over last 24h
-    const now = Date.now() / 1000;
-    const bucketSize = 1800; // 30 min
-    const numBuckets = 48;
-    const buckets = [];
-    for (let i = numBuckets - 1; i >= 0; i--) {
-        const t = now - i * bucketSize;
-        buckets.push({ t, fetched: 0, jio: 0, otp: 0 });
-    }
-
-    events.forEach(e => {
-        if (e.t < now - numBuckets * bucketSize) return;
-        const idx = Math.floor((e.t - (now - numBuckets * bucketSize)) / bucketSize);
-        if (idx >= 0 && idx < numBuckets && buckets[idx]) {
-            if (e.e === 'fetched') buckets[idx].fetched++;
-            if (e.e === 'jio') buckets[idx].jio++;
-            if (e.e === 'otp') buckets[idx].otp++;
-        }
-    });
-
-    const labels = buckets.map(b => new Date(b.t * 1000).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }));
-
-    const ctx = document.getElementById('timelineChart');
-    if (timelineChart) timelineChart.destroy();
-    timelineChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels,
-            datasets: [
-                { label: 'Jio %', data: buckets.map(b => b.fetched > 0 ? Math.round(b.jio / b.fetched * 100) : 0), borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.1)', fill: true, tension: 0.4 },
-                { label: 'OTP %', data: buckets.map(b => b.jio > 0 ? Math.round(b.otp / b.jio * 100) : 0), borderColor: '#06b6d4', backgroundColor: 'rgba(6,182,212,0.1)', fill: true, tension: 0.4 }
-            ]
-        },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { labels: { color: '#94a3b8', font: { size: 11 } } } },
-            scales: {
-                x: { ticks: { color: '#64748b', maxTicksLimit: 8 }, grid: { color: '#1e293b' } },
-                y: { ticks: { color: '#64748b', callback: v => v + '%' }, grid: { color: '#1e293b' }, min: 0, max: 100 }
-            }
-        }
-    });
-}
-
-function renderCostTable(events) {
-    const stats = {};
-    for (const p of Object.keys(PROVIDERS)) stats[p] = { fetched: 0, jio: 0, otp: 0, login: 0 };
-    events.forEach(e => { if (stats[e.p] && stats[e.p][e.e] !== undefined) stats[e.p][e.e]++; });
-
-    const table = document.getElementById('costTable');
-    // Keep header, remove old rows
-    table.querySelectorAll('.cost-row').forEach(r => r.remove());
-
-    for (const [p, s] of Object.entries(stats)) {
-        const jioP = s.fetched > 0 ? (s.jio / s.fetched * 100).toFixed(1) + '%' : '0%';
-        const otpP = s.jio > 0 ? (s.otp / s.jio * 100).toFixed(1) + '%' : '0%';
-        const row = document.createElement('div');
-        row.className = 'cost-row';
-        row.innerHTML = `<span>${p}</span><span>${s.fetched}</span><span>${s.jio}</span><span>${s.otp}</span><span>${s.login}</span><span>${jioP}</span><span>${otpP}</span>`;
-        table.appendChild(row);
-    }
-}
 
 //  Helpers 
 function updateConnectionStatus(type, text) {
