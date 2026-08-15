@@ -2389,19 +2389,43 @@ async def firebase_sniper_worker(speed_delay, scan_mode="deep"):
 
         await emit_log("✅ Firebase Direct completed — all devices processed!", "success")
 
+        # Remove processed DBs from config so they don't get re-scanned
+        processed_urls = set(_url_key_map.keys())
+        remaining_dbs = [db for db in config.get("firebase_dbs", [])
+                        if clean_firebase_url((db.get("url") or "").strip()) not in processed_urls]
+        remaining_urls = [u for u in config.get("firebase_urls", [])
+                         if clean_firebase_url(u.strip()) not in processed_urls]
+        config["firebase_dbs"] = remaining_dbs
+        config["firebase_urls"] = remaining_urls
+        save_config(config)
+        if processed_urls:
+            db_names = [u.split("//")[1].split(".")[0] if "//" in u else u for u in processed_urls]
+            await emit_log(f"🗑 Removed {len(processed_urls)} processed DB(s): {', '.join(list(db_names)[:3])}{'...' if len(db_names)>3 else ''}", "info")
+
         # Wait for TG Monitor to signal a new Firebase DB (event-based, instant wake-up)
         await emit_log("⏳ Waiting for new Firebase DB from TG Monitor...", "info")
         _new_firebase_event.clear()
         try:
-            # Wait up to 30 minutes, but wake up instantly when TG Monitor adds a DB
             await asyncio.wait_for(_new_firebase_event.wait(), timeout=1800)
             if state.stop_event.is_set():
                 return
-            await emit_log("🆕 New Firebase DB received! Restarting sniper...", "success")
+            await emit_log("🆕 New Firebase DB received! Starting next batch...", "success")
             _new_firebase_event.clear()
-            asyncio.create_task(firebase_sniper_worker(speed_delay, scan_mode=scan_mode))
+            # Clear state for fresh start with new DB
+            _url_key_map.clear()
+            # Clear used_devices file so new DB devices aren't skipped
+            used_file = os.path.join(DATA_DIR, "used_firebase_devices.txt")
+            try:
+                open(used_file, "w").close()
+            except Exception:
+                pass
+            # Restart worker cleanly
+            if not state.stop_event.is_set():
+                asyncio.create_task(firebase_sniper_worker(speed_delay, scan_mode=scan_mode))
+            return
         except asyncio.TimeoutError:
             await emit_log("⏰ No new Firebase DB after 30 minutes. Stopping.", "warn")
+            return
 
 # ─── Sniper Workers ──────────────────────────────────────────────────────────
 async def sniper_worker(p_name, speed_delay):
