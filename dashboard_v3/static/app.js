@@ -1223,7 +1223,7 @@ async function loadCheckedLinks() {
 function renderCheckedLinks() {
     const container = document.getElementById('checkedLinksContainer');
     if (!container) return;
-    document.getElementById('checkedLinksTabCount').textContent = checkedLinks.length;
+    document.getElementById('checkedLinksTabCount')?.textContent && (document.getElementById('checkedLinksTabCount').textContent = checkedLinks.length);
     if (!checkedLinks.length) {
         container.innerHTML = `<div class="empty-state"><div class="empty-icon"></div><h3>No checked links</h3><p>Valid links will appear here after auto-check</p></div>`;
         return;
@@ -1383,7 +1383,7 @@ function updateLinkCounters(count) {
     if (list) list.textContent = value;
 }
 
-function updateCheckedLinkCounters(count) {
+function updateCheckedLinkCounters(count) { return; // removed
     const value = count || 0;
     const tab = document.getElementById('tabCheckedLinkCount');
     const list = document.getElementById('checkedLinksTabCount');

@@ -1189,3 +1189,28 @@ textarea.setting-input { resize: vertical; line-height: 1.5; min-height: 80px; }
 .order-timer-svg { width: 28px; height: 28px; transform: rotate(-90deg); flex-shrink: 0; }
 .order-timer-bg { fill: none; stroke: var(--bg-4); stroke-width: 2.5; }
 .order-timer-fill { fill: none; stroke: var(--blue); stroke-width: 2.5; stroke-linecap: round; transition: stroke-dasharray 1s linear; }
+
+/* ── Link action buttons override ── */
+.btn-copy-link, .btn-open-link {
+  width: auto !important;
+  padding: 3px 8px !important;
+  font-size: 10px !important;
+  flex-shrink: 0;
+}
+.btn-link-delete {
+  width: auto !important;
+  padding: 3px 7px !important;
+  font-size: 12px !important;
+  border-radius: 4px;
+  border: 1px solid var(--red-border);
+  background: var(--red-bg);
+  color: var(--red) !important;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.saved-link-text {
+  text-decoration: none;
+}
+.saved-link-text:hover {
+  text-decoration: underline;
+}
