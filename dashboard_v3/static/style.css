@@ -178,7 +178,7 @@ html, body {
    ════════════════════════════════ */
 .main-layout {
   display: grid;
-  grid-template-columns: 220px 1fr 260px;
+  grid-template-columns: 260px 1fr 260px;
   height: calc(100vh - 52px);
   overflow: hidden;
 }
@@ -227,14 +227,14 @@ html, body {
 
 .provider-card {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
   cursor: pointer;
   transition: background 0.12s, border-color 0.12s;
-  gap: 8px;
+  gap: 10px;
 }
 .provider-card:hover { background: var(--bg-3); }
 .provider-card.selected {
@@ -243,34 +243,39 @@ html, body {
 }
 
 .provider-dot {
-  width: 8px; height: 8px;
+  width: 7px; height: 7px;
   border-radius: 50%;
   background: var(--bg-4);
   flex-shrink: 0;
+  margin-top: 3px;
 }
 .provider-card.selected .provider-dot { background: var(--blue); }
 
 .provider-info { flex: 1; min-width: 0; }
 .provider-name {
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   color: var(--text-1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.3;
 }
 .provider-sub {
   font-size: 10px;
   color: var(--text-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.3;
+  margin-top: 1px;
 }
 
 .provider-balance {
   font-size: 11px;
   font-weight: 600;
   flex-shrink: 0;
+  padding-top: 1px;
+  min-width: 44px;
+  text-align: right;
 }
 .balance-ok { color: var(--green); }
 .balance-error { color: var(--red); }
@@ -283,9 +288,11 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 0;
-  gap: 8px;
+  padding: 7px 0;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
 }
+.batch-control:last-child { border-bottom: none; }
 .control-label {
   font-size: 11px;
   color: var(--text-2);
@@ -366,7 +373,7 @@ html, body {
 /* ════════════════════════════════
    ACTION BUTTONS
    ════════════════════════════════ */
-.actions-section { display: flex; flex-direction: column; gap: 6px; }
+.actions-section { display: flex; flex-direction: column; gap: 7px; }
 
 .btn-primary, .btn-secondary, .btn-warning, .btn-danger {
   width: 100%;
