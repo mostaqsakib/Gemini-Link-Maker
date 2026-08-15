@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Jio Sniper Dashboard — Backend Server v2.0
+Rexovaan Gemini Dashboard — Backend Server v2.0
 FastAPI + Socket.IO + Playwright + Multi-Provider SMS APIs
 Features: Resource Monitor, Settings, Analytics, Order Detail
 """
@@ -3506,5 +3506,5 @@ async def tg_monitor_verify_code(request: Request):
 # ─── Main ─────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
-    print(f"🚀 Jio Sniper Dashboard v2.0 — http://localhost:{port}")
+    print(f"🚀 Rexovaan Gemini Dashboard v2.0 — http://localhost:{port}")
     uvicorn.run(sio_app, host="0.0.0.0", port=port, log_level="warning")
