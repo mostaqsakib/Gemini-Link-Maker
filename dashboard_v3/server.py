@@ -74,12 +74,12 @@ DEFAULT_CONFIG = {
         "Grizzly": {
             "url": "https://api.grizzlysms.com/stubs/handler_api.php",
             "key": os.environ.get("GRIZZLY_API_KEY", ""),
-            "service": "jio", "country": "22", "delay": 3
+            "service": "mj", "country": "22", "delay": 3
         },
         "Tiger": {
             "url": "https://api.tiger-sms.com/stubs/handler_api.php",
             "key": os.environ.get("TIGER_API_KEY", ""),
-            "service": "mjo", "country": "22", "delay": 5
+            "service": "mj", "country": "22", "delay": 5
         },
         "MeowSMS": {
             "url": "https://meowsms.shop/stubs/handler_api.php",
