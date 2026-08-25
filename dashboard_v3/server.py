@@ -74,7 +74,7 @@ DEFAULT_CONFIG = {
         "Grizzly": {
             "url": "https://api.grizzlysms.com/stubs/handler_api.php",
             "key": os.environ.get("GRIZZLY_API_KEY", ""),
-            "service": "jio", "country": "22", "delay": 3
+            "service": "jio", "country": "22", "delay": 3, "max_price": 0.21
         },
         "Tiger": {
             "url": "https://api.tiger-sms.com/stubs/handler_api.php",
@@ -776,6 +776,9 @@ async def buy_number(p_name):
             if p_name == "Grizzly":
                 v2_params = dict(params)
                 v2_params["action"] = "getNumberV2"
+                # Use max_price to get better quality numbers with higher SMS delivery rate
+                if cfg.get("max_price"):
+                    v2_params["maxPrice"] = cfg["max_price"]
                 async with state.http_session.get(cfg["url"], params=v2_params) as resp:
                     text = (await resp.text()).strip()
                     # getNumberV2 returns JSON: {"activationId":123,"phoneNumber":"91..."}
