@@ -1206,27 +1206,34 @@ async def _handle_jio_number_impl(order):
             except Exception as e:
                 order_event(order, f"⚠️ Banner not found or error: {str(e)[:40]}")
 
-            # Fallback to manual mode if automation failed or timed out
-            order["status"] = "extract_link"
-            order_event(order, "✅ Login successful! Banner not found, do manual extraction.")
-            await emit_order(order)
-            await emit_log(f"🎉 [{p_name}] {phone} LOGGED IN! Extract link now.", "success")
-
-            # 20-minute timeout for manual extraction
-            await asyncio.sleep(1200)
-            if order.get("status") == "extract_link":
-                order["status"] = "completed"
-                order_event(order, "⏰ 20 minutes passed. Closing tab to free RAM.")
+            # If captured_url has something, try to save it directly
+            if captured_url:
+                target_link = next((u for u in captured_url if "serviceactivation.google.com" in u), captured_url[0])
+                saved_links = config.get("saved_links", [])
+                if target_link not in saved_links:
+                    saved_links.append(target_link)
+                    config["saved_links"] = saved_links
+                    save_config(config)
+                link_count = len(config.get("saved_links", []))
+                await sio.emit("link_saved", {"phone": phone, "link": target_link, "count": link_count})
+                await emit_log(f"🎉 [{p_name}] {phone} Link saved from network capture!", "success")
+                order["status"] = "logged_in"
+                order_event(order, "✅ Link extracted from network capture!")
                 await emit_order(order)
-                await emit_log(f"🧹 [{phone}] Auto-closed after 20 mins of inactivity", "warn")
-                if context:
-                    try:
-                        await context.close()
-                    except:
-                        pass
-                if order["id"] in state.orders:
-                    del state.orders[order["id"]]
-                    await sio.emit("number_remove", {"id": order["id"]})
+            else:
+                # No link found — close browser and move on
+                await emit_log(f"⚠️ [{p_name}] {phone} No Gemini offer on this number. Closing.", "warn")
+                order["status"] = "cancelled"
+                order_event(order, "No Gemini offer found. Closing.")
+                await emit_order(order)
+            if context:
+                try:
+                    await context.close()
+                except:
+                    pass
+            if order["id"] in state.orders:
+                del state.orders[order["id"]]
+                await sio.emit("number_remove", {"id": order["id"]})
 
         except Exception as e:
             order["status"] = "cancelled"
