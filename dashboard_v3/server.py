@@ -2534,7 +2534,10 @@ async def on_start_sniping(sid, data):
                 scan_mode = "deep" if data["deep_scan"] else "normal"
             state.sniper_tasks.append(asyncio.create_task(firebase_sniper_worker(speed_delay, scan_mode=scan_mode)))
         elif p in config["providers"]:
-            state.sniper_tasks.append(asyncio.create_task(sniper_worker(p, speed_delay)))
+            # Launch multiple parallel workers per provider based on browser_count
+            worker_count = max(1, min(data.get("batch_size", 1), 10))
+            for _ in range(worker_count):
+                state.sniper_tasks.append(asyncio.create_task(sniper_worker(p, speed_delay)))
 
 # ─── Link Checker ─────────────────────────────────────────────────────────────
 LINK_CHECKER_PROFILE = os.path.join(DATA_DIR, "google_checker_profile")
