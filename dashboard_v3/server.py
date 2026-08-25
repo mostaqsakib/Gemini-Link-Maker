@@ -171,6 +171,15 @@ def load_config():
                 # Keep firebase_dbs from saved config (set via Settings UI)
                 if "firebase_dbs" not in merged:
                     merged["firebase_dbs"] = []
+                # Always sync provider defaults (max_price etc) from DEFAULT_CONFIG
+                for p_name, p_defaults in DEFAULT_CONFIG["providers"].items():
+                    if p_name in merged.get("providers", {}):
+                        for k, v in p_defaults.items():
+                            if k not in ("key",):  # never overwrite user-set keys
+                                merged["providers"][p_name].setdefault(k, v)
+                                # Force update non-user fields
+                                if k in ("max_price", "url", "service", "country"):
+                                    merged["providers"][p_name][k] = v
                 # Keep saved_links from saved config (persists across restarts)
                 if "saved_links" not in merged:
                     merged["saved_links"] = []
@@ -1012,7 +1021,7 @@ async def _handle_jio_number_impl(order):
     order_event(order, "Waiting for OTP from SMS provider...")
     await emit_order(order)
 
-    max_attempts = 80  # Override to 4 minutes (80 attempts * 3s) for the Resend OTP flow
+    max_attempts = 80  # Poll every 3s, cancel enforced at 3min by elapsed check
 
     # Poll for OTP
     otp_code = None
@@ -1021,17 +1030,16 @@ async def _handle_jio_number_impl(order):
 
     for attempt in range(max_attempts):
         elapsed = time.time() - start_time
-        if elapsed > 121 and page and not resend_clicked:
-            resend_clicked = True
-            try:
-                order_event(order, "2 mins passed. Clicking Resend OTP on jio.com...")
-                await emit_order(order)
-                await emit_log(f"[{phone}] Clicking Resend OTP...", "warn")
-                await page.locator('button[aria-label="Resend OTP"]').click(timeout=5000)
-                await asyncio.sleep(1)
-            except Exception as e:
-                order_event(order, f"Could not click Resend OTP: {str(e)[:50]}")
-                await emit_log(f"[{phone}] Failed to click Resend OTP", "error")
+        # After 3 minutes with no OTP, cancel immediately (no resend)
+        if elapsed > 180:
+            order["status"] = "cancelling"
+            order_event(order, "3 minutes passed — no OTP. Cancelling and refunding...")
+            await emit_order(order)
+            await emit_log(f"[{p_name}] {phone} — 3min timeout, cancelling", "warn")
+            asyncio.create_task(cancel_order(order, instant=True))
+            if context:
+                await context.close()
+            return
 
         # Graceful stop: removed early return so active Jio logins finish processing
         status = await get_otp_status(p_name, aid)
