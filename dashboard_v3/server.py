@@ -772,11 +772,31 @@ async def buy_number(p_name):
             params["service"] = rot
 
         try:
-            async with state.http_session.get(cfg["url"], params=params) as resp:
-                text = (await resp.text()).strip()
-                if text.startswith("ACCESS_NUMBER:"):
-                    parts = text.split(":")
-                    return {"status": "success", "aid": parts[1], "phone": parts[2]}
+            # Grizzly uses getNumberV2 which returns JSON and supports all price tiers
+            if p_name == "Grizzly":
+                v2_params = dict(params)
+                v2_params["action"] = "getNumberV2"
+                async with state.http_session.get(cfg["url"], params=v2_params) as resp:
+                    text = (await resp.text()).strip()
+                    # getNumberV2 returns JSON: {"activationId":123,"phoneNumber":"91..."}
+                    if text.startswith("{"):
+                        import json as _json
+                        data = _json.loads(text)
+                        if "activationId" in data and "phoneNumber" in data:
+                            phone = str(data["phoneNumber"])
+                            # Remove country code if present
+                            if phone.startswith("91") and len(phone) == 12:
+                                phone = phone[2:]
+                            return {"status": "success", "aid": str(data["activationId"]), "phone": phone}
+                    elif text.startswith("ACCESS_NUMBER:"):
+                        parts = text.split(":")
+                        return {"status": "success", "aid": parts[1], "phone": parts[2]}
+            else:
+                async with state.http_session.get(cfg["url"], params=params) as resp:
+                    text = (await resp.text()).strip()
+                    if text.startswith("ACCESS_NUMBER:"):
+                        parts = text.split(":")
+                        return {"status": "success", "aid": parts[1], "phone": parts[2]}
         except:
             pass
     return {"status": "error"}
