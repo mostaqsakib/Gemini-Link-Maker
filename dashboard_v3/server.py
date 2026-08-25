@@ -981,13 +981,16 @@ async def _handle_jio_number_impl(order):
             order["_page"] = page
 
             await page.goto(JIO_LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
-            await asyncio.sleep(2)
+            await asyncio.sleep(3)
 
             order_event(order, f"Typing phone number: {clean_phone}")
+            # Wait for field to be visible before filling
+            await page.locator('[data-testid="numberField"]').wait_for(state="visible", timeout=45000)
             await page.locator('[data-testid="numberField"]').fill(clean_phone)
             await asyncio.sleep(1)
 
             order_event(order, "Clicking Generate OTP...")
+            await page.locator('[data-testid="generateOTPButton"]').wait_for(state="visible", timeout=10000)
             await page.locator('[data-testid="generateOTPButton"]').click()
             await emit_log(f"[{phone}] Clicked Generate OTP on jio.com", "info")
             await asyncio.sleep(2)
