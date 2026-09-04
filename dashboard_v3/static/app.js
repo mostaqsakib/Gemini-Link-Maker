@@ -309,12 +309,14 @@ function initControls() {
     let scanMode = 'deep';
 
     document.getElementById('countDown').addEventListener('click', () => {
+        batchCount = Math.max(1, parseInt(document.getElementById('batchCount').value)||1);
         if (batchCount > 1) batchCount--;
-        document.getElementById('batchCount').textContent = batchCount;
+        document.getElementById('batchCount').value = batchCount;
     });
     document.getElementById('countUp').addEventListener('click', () => {
+        batchCount = Math.min(1000, parseInt(document.getElementById('batchCount').value)||1);
         if (batchCount < 1000) batchCount++;
-        document.getElementById('batchCount').textContent = batchCount;
+        document.getElementById('batchCount').value = batchCount;
     });
 
     document.getElementById('delayDown').addEventListener('click', () => {
@@ -336,6 +338,7 @@ function initControls() {
     document.getElementById('startBtn').addEventListener('click', () => {
         if (selectedProviders.length === 0) { addLog('Select at least one provider!', 'error'); return; }
         const headlessMode = document.getElementById('headlessToggle').checked;
+        batchCount = Math.min(1000, Math.max(1, parseInt(document.getElementById('batchCount').value)||1));
         socket.emit('start_sniping', { providers: selectedProviders, batch_size: batchCount, scan_mode: scanMode, headless: headlessMode, otp_delay: otpDelay });
     });
     document.getElementById('pauseBtn').addEventListener('click', () => {
