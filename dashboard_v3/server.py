@@ -1301,6 +1301,7 @@ FAILED_CSV = os.path.join(DATA_DIR, "failed_links.csv")
 AIRTEL_SUCCESS_CSV = os.path.join(DATA_DIR, "airtel_duolingo_links.csv")
 AIRTEL_FAILED_CSV  = os.path.join(DATA_DIR, "airtel_duolingo_failed.csv")
 AIRTEL_USED_FILE   = os.path.join(DATA_DIR, "used_airtel_devices.txt")
+AIRTEL_LINKS_FILE  = os.path.join(DATA_DIR, "airtel_duolingo_links.txt")  # persistent plain list
 
 def init_csvs():
     if not os.path.exists(SUCCESS_CSV):
@@ -3544,8 +3545,11 @@ async def tg_monitor_verify_code(request: Request):
 
 # ─── Airtel Duolingo Automation ───────────────────────────────────────────────
 
-AIRTEL_LOGIN_URL = "https://www.airtel.in/manage-account/login"
-AIRTEL_THANKS_URL = "https://www.airtel.in/thanks/"
+AIRTEL_LOGIN_URL      = "https://www.airtel.in/manage-account/login"
+AIRTEL_THANKS_URL     = "https://www.airtel.in/thanks/"
+# Direct API endpoints — used instead of browser for OTP trigger
+AIRTEL_SEND_OTP_URL   = "https://www.airtel.in/api/loginservice/v2/otp/send"
+AIRTEL_VERIFY_OTP_URL = "https://www.airtel.in/api/loginservice/v2/otp/verify"
 
 def init_airtel_csvs():
     if not os.path.exists(AIRTEL_SUCCESS_CSV):
@@ -4000,6 +4004,13 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
             config["saved_duolingo_links"] = saved_duolingo
             save_config(config)
 
+        # Also write to plain txt file — survives Railway restarts independently
+        try:
+            with open(AIRTEL_LINKS_FILE, "a") as f:
+                f.write(duolingo_url + "\n")
+        except Exception:
+            pass
+
         with open(AIRTEL_SUCCESS_CSV, "a", newline="") as f:
             csv.writer(f).writerow([fb_url, device_id, "+91" + clean_phone, duolingo_url, otp_wait_time])
         with open(AIRTEL_USED_FILE, "a") as f:
@@ -4270,13 +4281,36 @@ async def on_stop_airtel_batch(sid, data=None):
 
 @sio.on("get_airtel_links")
 async def on_get_airtel_links(sid, data=None):
-    links = config.get("saved_duolingo_links", [])
+    links = _load_airtel_links()
     await sio.emit("airtel_links_data", {"links": links, "count": len(links)})
+
+def _load_airtel_links():
+    """Load from txt file (persistent) + config, deduplicated."""
+    links = []
+    seen = set()
+    # From txt file (most reliable across restarts)
+    if os.path.exists(AIRTEL_LINKS_FILE):
+        with open(AIRTEL_LINKS_FILE, "r") as f:
+            for line in f:
+                url = line.strip()
+                if url and url not in seen:
+                    links.append(url)
+                    seen.add(url)
+    # From config (in-memory, may have ones not yet flushed)
+    for url in config.get("saved_duolingo_links", []):
+        if url and url not in seen:
+            links.append(url)
+            seen.add(url)
+    return links
 
 @sio.on("clear_airtel_links")
 async def on_clear_airtel_links(sid, data=None):
     config["saved_duolingo_links"] = []
     save_config(config)
+    try:
+        open(AIRTEL_LINKS_FILE, "w").close()
+    except Exception:
+        pass
     await sio.emit("airtel_links_data", {"links": [], "count": 0})
     await emit_log("[Airtel] Duolingo links cleared.", "info")
 
@@ -4299,25 +4333,27 @@ async def get_airtel_screenshot(phone: str):
 @app.get("/api/airtel-screenshots")
 async def list_airtel_screenshots():
     files = [f for f in os.listdir(DATA_DIR) if f.startswith("airtel_debug_") and f.endswith(".png")]
-    # Group by phone number
     phones = set()
     for f in files:
         parts = f.replace("airtel_debug_","").replace(".png","").split("_")
         phones.add(parts[0])
     return {"screenshots": sorted(phones)}
-    links = config.get("saved_duolingo_links", [])
+
+@app.get("/api/airtel-links")
+async def api_get_airtel_links():
+    links = _load_airtel_links()
     return {"links": links, "count": len(links)}
 
 @app.get("/download/airtel-success")
 async def download_airtel_success():
-    if not os.path.exists(AIRTEL_SUCCESS_CSV):
-        return Response(content="No data yet", media_type="text/plain")
-    with open(AIRTEL_SUCCESS_CSV, "r") as f:
-        content = f.read()
+    links = _load_airtel_links()
+    content = "\n".join(links)
+    if not content.strip():
+        return Response(content="No links yet", media_type="text/plain")
     return Response(
         content=content,
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=airtel_duolingo_links.csv"}
+        media_type="text/plain",
+        headers={"Content-Disposition": "attachment; filename=airtel_duolingo_links.txt"}
     )
 
 
