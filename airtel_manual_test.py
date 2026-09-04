@@ -132,12 +132,33 @@ async def poll_otp(session, fb_base, device_id, known_keys, timeout=90):
 
 # ── PER-NUMBER FLOW ───────────────────────────────────────────────────────────
 
-async def test_number(session, page, context, device):
+async def test_number(session, browser, device):
     phone     = device["phone"]
     device_id = device["device_id"]
     fb_base   = device["fb_base"]
 
     log(f"▶ +91{phone}  [{device['db_name']}]")
+
+    # Fresh context per number — clean session, no leftover cookies
+    context = await browser.new_context(
+        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        viewport={"width": 1280, "height": 800},
+    )
+    page = await context.new_page()
+
+    try:
+        result = await _run_number(session, page, context, device)
+    finally:
+        try:
+            await context.close()
+        except Exception:
+            pass
+    return result
+
+async def _run_number(session, page, context, device):
+    phone     = device["phone"]
+    device_id = device["device_id"]
+    fb_base   = device["fb_base"]
 
     # Firebase snapshot
     known_keys = await get_msg_keys(session, fb_base, device_id)
@@ -283,18 +304,12 @@ async def main():
                 slow_mo=100,
                 args=["--start-maximized"]
             )
-            context = await browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                viewport={"width": 1280, "height": 800},
-            )
-            page = await context.new_page()
-
             found_count = 0
             skip_count  = 0
 
             for i, device in enumerate(devices):
                 log(f"\n[{i+1}/{len(devices)}] ", end="")
-                result = await test_number(session, page, context, device)
+                result = await test_number(session, browser, device)
 
                 if result == "found":
                     found_count += 1
