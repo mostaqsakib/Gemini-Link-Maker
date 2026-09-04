@@ -1704,6 +1704,9 @@ async def poll_for_otp(fb_url, device_id, known_msg_keys, timeout=45, poll_inter
                     if not text:
                         text = str(msg_data)
 
+                    # Log raw message so we can see Airtel OTP format
+                    await emit_log(f"📨 POLL [{device_id[:8]}] new msg '{key}': {str(msg_data)[:200]}", "info")
+
                     normalized = normalize_digits(text)
                     otp_match = re.search(r'(?<!\d)(\d{6})(?!\d)', normalized)
                     if otp_match:
