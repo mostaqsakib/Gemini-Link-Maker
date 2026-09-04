@@ -3625,65 +3625,100 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
         await page.goto(AIRTEL_LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(3)
 
-        # Debug screenshot
+        # Debug screenshot — step 0: page loaded
         ss_path = os.path.join(DATA_DIR, f"airtel_debug_{clean_phone}.png")
         await page.screenshot(path=ss_path, full_page=True)
-        await emit_log(f"[Airtel/{clean_phone}] Screenshot saved → /api/airtel-screenshot/{clean_phone}", "info")
 
-        # Debug: log page title and URL to confirm load
+        # Debug: log page title, URL, and all input HTML
         page_title = await page.title()
-        await emit_log(f"[Airtel/{clean_phone}] Page loaded: '{page_title}' at {page.url}", "info")
+        await emit_log(f"[Airtel/{clean_phone}] Page: '{page_title}' @ {page.url}", "info")
+
+        all_inputs_html = await page.evaluate("""
+            () => Array.from(document.querySelectorAll('input')).map(i =>
+                `<input type="${i.type}" name="${i.name}" id="${i.id}" placeholder="${i.placeholder}" class="${i.className.substring(0,60)}">`
+            ).join(' | ')
+        """)
+        await emit_log(f"[Airtel/{clean_phone}] Inputs: {all_inputs_html[:500]}", "info")
 
         # ── Step 2: Enter mobile number ────────────────────────────────────────
         order_event(order, f"Entering phone number: {clean_phone}")
         await emit_order(order)
 
-        # Airtel login: try multiple selectors
-        phone_sel = (
-            'input[type="tel"], input[placeholder*="Mobile"], input[placeholder*="mobile"], '
-            'input[placeholder*="mobile number"], input[placeholder*="Enter mobile"], '
-            'input[name="mobileNumber"], input[id*="mobile"], input[id*="phone"], '
-            'input[autocomplete="tel"]'
-        )
-        try:
-            await page.locator(phone_sel).first.wait_for(state="visible", timeout=20000)
-            await page.locator(phone_sel).first.fill(clean_phone)
-            await emit_log(f"[Airtel/{clean_phone}] Phone number filled", "info")
-        except Exception as e:
-            # Log all inputs on page for debugging
-            all_inputs = await page.evaluate("""
-                () => Array.from(document.querySelectorAll('input')).map(i => ({
-                    type: i.type, name: i.name, id: i.id,
-                    placeholder: i.placeholder, class: i.className.substring(0,50)
-                }))
-            """)
-            await emit_log(f"[Airtel/{clean_phone}] Phone input not found. Inputs on page: {all_inputs}", "error")
-            raise Exception(f"Phone input not found: {e}")
+        # Try every possible selector one by one
+        phone_filled = False
+        for sel in [
+            'input[type="tel"]',
+            'input[placeholder*="mobile" i]',
+            'input[placeholder*="Mobile"]',
+            'input[placeholder*="number" i]',
+            'input[name="mobileNumber"]',
+            'input[name="mobile"]',
+            'input[name="phone"]',
+            'input[id*="mobile" i]',
+            'input[id*="phone" i]',
+            'input[autocomplete="tel"]',
+            'input[maxlength="10"]',
+            'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"])',
+        ]:
+            try:
+                el = page.locator(sel).first
+                if await el.count() > 0:
+                    await el.wait_for(state="visible", timeout=3000)
+                    await el.fill(clean_phone)
+                    phone_filled = True
+                    await emit_log(f"[Airtel/{clean_phone}] Filled with selector: {sel}", "info")
+                    break
+            except Exception:
+                continue
 
+        if not phone_filled:
+            await emit_log(f"[Airtel/{clean_phone}] ❌ Could not fill phone. Raw inputs: {all_inputs_html[:800]}", "error")
+            raise Exception("Phone input not found with any selector")
+
+        # Screenshot after fill
+        ss2_path = os.path.join(DATA_DIR, f"airtel_debug_{clean_phone}_filled.png")
+        await page.screenshot(path=ss2_path, full_page=True)
         await asyncio.sleep(1)
 
-        # Click "Get OTP" / "Send OTP"
-        otp_btn_sel = (
-            'button:has-text("Get OTP"), button:has-text("Send OTP"), '
-            'button:has-text("Generate OTP"), button:has-text("REQUEST OTP"), '
-            'button:has-text("SEND OTP"), button:has-text("Verify"), '
-            '[data-testid*="otp"], [class*="get-otp"], [class*="sendOtp"], '
-            'button[type="submit"]'
-        )
-        try:
-            await page.locator(otp_btn_sel).first.wait_for(state="visible", timeout=10000)
-            await page.locator(otp_btn_sel).first.click()
-            await emit_log(f"[Airtel/{clean_phone}] OTP button clicked", "info")
-        except Exception as e:
-            # Log all buttons for debugging
+        # Click OTP button — try each selector
+        otp_clicked = False
+        for sel in [
+            'button:has-text("Get OTP")',
+            'button:has-text("Send OTP")',
+            'button:has-text("SEND OTP")',
+            'button:has-text("Generate OTP")',
+            'button:has-text("REQUEST OTP")',
+            'button:has-text("GET OTP")',
+            '[data-testid*="otp"]',
+            '[class*="get-otp"]',
+            '[class*="sendOtp"]',
+            '[class*="getOtp"]',
+            'button[type="submit"]',
+        ]:
+            try:
+                el = page.locator(sel).first
+                if await el.count() > 0:
+                    await el.wait_for(state="visible", timeout=3000)
+                    await el.click()
+                    otp_clicked = True
+                    await emit_log(f"[Airtel/{clean_phone}] OTP button clicked with: {sel}", "info")
+                    break
+            except Exception:
+                continue
+
+        if not otp_clicked:
             all_btns = await page.evaluate("""
-                () => Array.from(document.querySelectorAll('button')).map(b => ({
-                    text: b.innerText.substring(0,30), type: b.type,
-                    class: b.className.substring(0,50)
-                }))
+                () => Array.from(document.querySelectorAll('button')).map(b =>
+                    `[${b.type}] "${b.innerText.trim().substring(0,30)}" class="${b.className.substring(0,40)}"`
+                ).join(' | ')
             """)
-            await emit_log(f"[Airtel/{clean_phone}] OTP button not found. Buttons: {all_btns}", "error")
-            raise Exception(f"OTP button not found: {e}")
+            await emit_log(f"[Airtel/{clean_phone}] ❌ OTP button not found. Buttons: {all_btns[:600]}", "error")
+            raise Exception("OTP button not found")
+
+        await asyncio.sleep(3)
+        # Screenshot after OTP click
+        ss3_path = os.path.join(DATA_DIR, f"airtel_debug_{clean_phone}_otp_clicked.png")
+        await page.screenshot(path=ss3_path, full_page=True)
 
         # ── Step 3: Poll Firebase for OTP ──────────────────────────────────────
         order["status"] = "waiting_otp"
@@ -4128,6 +4163,14 @@ async def on_clear_airtel_links(sid, data=None):
     await sio.emit("airtel_links_data", {"links": [], "count": 0})
     await emit_log("[Airtel] Duolingo links cleared.", "info")
 
+@app.get("/api/airtel-screenshot/{phone}/{suffix}")
+async def get_airtel_screenshot_suffix(phone: str, suffix: str):
+    from fastapi.responses import FileResponse
+    ss_path = os.path.join(DATA_DIR, f"airtel_debug_{phone}_{suffix}.png")
+    if not os.path.exists(ss_path):
+        return Response(content="No screenshot", media_type="text/plain", status_code=404)
+    return FileResponse(ss_path, media_type="image/png")
+
 @app.get("/api/airtel-screenshot/{phone}")
 async def get_airtel_screenshot(phone: str):
     from fastapi.responses import FileResponse
@@ -4139,7 +4182,12 @@ async def get_airtel_screenshot(phone: str):
 @app.get("/api/airtel-screenshots")
 async def list_airtel_screenshots():
     files = [f for f in os.listdir(DATA_DIR) if f.startswith("airtel_debug_") and f.endswith(".png")]
-    return {"screenshots": [f.replace("airtel_debug_","").replace(".png","") for f in files]}
+    # Group by phone number
+    phones = set()
+    for f in files:
+        parts = f.replace("airtel_debug_","").replace(".png","").split("_")
+        phones.add(parts[0])
+    return {"screenshots": sorted(phones)}
     links = config.get("saved_duolingo_links", [])
     return {"links": links, "count": len(links)}
 

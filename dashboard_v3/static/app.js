@@ -2042,13 +2042,24 @@ async function loadAirtelScreenshots() {
             return;
         }
         container.innerHTML = phones.map(phone => `
-            <div style="text-align:center;">
-                <p style="font-size:11px;color:#a6adc8;margin:0 0 4px;">${phone}</p>
-                <a href="/api/airtel-screenshot/${phone}" target="_blank">
-                    <img src="/api/airtel-screenshot/${phone}?t=${Date.now()}"
-                        style="width:280px;border-radius:6px;border:1px solid #313244;cursor:pointer;"
-                        title="Click to open full size">
-                </a>
+            <div style="background:#1e1e2e;border:1px solid #313244;border-radius:8px;padding:8px;margin-bottom:8px;width:100%;">
+                <p style="font-size:12px;color:#cdd6f4;margin:0 0 8px;font-weight:bold;">📱 ${phone}</p>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    ${['','filled','otp_clicked'].map((suffix, i) => {
+                        const url = suffix
+                            ? `/api/airtel-screenshot/${phone}/${suffix}?t=${Date.now()}`
+                            : `/api/airtel-screenshot/${phone}?t=${Date.now()}`;
+                        const label = ['1. Page loaded','2. After fill','3. After OTP click'][i];
+                        return `<div style="text-align:center;">
+                            <p style="font-size:10px;color:#6c7086;margin:0 0 4px;">${label}</p>
+                            <a href="${url}" target="_blank">
+                                <img src="${url}" style="width:220px;border-radius:4px;border:1px solid #45475a;"
+                                    onerror="this.parentElement.parentElement.style.opacity='0.3'"
+                                    title="${label}">
+                            </a>
+                        </div>`;
+                    }).join('')}
+                </div>
             </div>
         `).join('');
     } catch(e) {
