@@ -156,6 +156,12 @@ function initSocket() {
         if (stopBtn)  stopBtn.disabled  = !data.running;
     });
 
+    socket.on('airtel_concurrency_updated', (data) => {
+        const el = document.getElementById('airtelConcurrency');
+        if (el) el.value = data.concurrency;
+        addLog(`🔧 Airtel concurrency → ${data.concurrency}`, 'info');
+    });
+
     socket.on('airtel_batch_progress', (data) => {
         const bar  = document.getElementById('airtelProgressBar');
         const fill = document.getElementById('airtelProgressFill');
@@ -2017,6 +2023,11 @@ function airtelClear() {
 function initAirtelBatch() {
     // Kept for compatibility — buttons now use inline onclick
     console.log('[Airtel] initAirtelBatch called');
+}
+
+function airtelUpdateConcurrency() {
+    const val = parseInt(document.getElementById('airtelConcurrency')?.value || '2');
+    socket.emit('update_airtel_concurrency', { concurrency: val });
 }
 
 // initAirtelBatch is called from the main DOMContentLoaded block above

