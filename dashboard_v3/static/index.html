@@ -147,6 +147,7 @@
                 <button class="tab-btn" data-tab="links">Links <span class="order-count" id="tabLinkCount">0</span></button>
                 <button class="tab-btn" data-tab="proxies">Proxies <span class="order-count" id="tabProxyCount">0</span></button>
                 <button class="tab-btn" data-tab="airtel">🦉 Airtel <span class="order-count" id="tabDuoCount">0</span></button>
+                <button class="tab-btn" data-tab="airtel-manual">🔬 Manual Test</button>
                 <button class="btn-icon tab-refresh" id="refreshOrders" title="Refresh">↻</button>
             </div>
 
@@ -241,6 +242,40 @@
                     <div id="airtelScreenshots" style="display:flex;flex-wrap:wrap;gap:8px;">
                         <p style="color:#6c7086;font-size:12px;">No screenshots yet.</p>
                     </div>
+                </div>
+            </div>
+
+            <!-- Manual Test Tab -->
+            <div class="tab-content" id="tab-airtel-manual">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+                    <span style="font-weight:600;color:#cdd6f4;">🔬 Manual Airtel Test</span>
+                    <button class="btn-secondary" style="margin-left:auto;" onclick="manualScanDevices()">↻ Scan Firebase Devices</button>
+                </div>
+
+                <!-- Device list -->
+                <div id="manualDeviceList" style="max-height:180px;overflow-y:auto;margin-bottom:12px;display:flex;flex-direction:column;gap:4px;">
+                    <p style="color:#6c7086;font-size:13px;">Click "Scan Firebase Devices" to load numbers.</p>
+                </div>
+
+                <!-- Session log + screenshots -->
+                <div id="manualSessionPanel" style="display:none;">
+                    <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap;">
+                        <span id="manualSessionPhone" style="font-weight:600;color:#89b4fa;font-size:14px;"></span>
+                        <span id="manualSessionStatus" style="font-size:12px;padding:2px 8px;border-radius:10px;background:#313244;color:#cdd6f4;"></span>
+                    </div>
+
+                    <!-- OTP input (shown when waiting) -->
+                    <div id="manualOtpRow" style="display:none;margin-bottom:10px;display:flex;gap:8px;align-items:center;">
+                        <input id="manualOtpInput" type="text" maxlength="6" placeholder="Enter OTP"
+                            style="width:120px;padding:6px 10px;border-radius:6px;border:1px solid #45475a;background:#1e1e2e;color:#cdd6f4;font-size:16px;letter-spacing:4px;">
+                        <button class="btn-secondary" style="background:#10b981;color:#fff;" onclick="manualSubmitOtp()">✓ Submit OTP</button>
+                    </div>
+
+                    <!-- Log -->
+                    <div id="manualLog" style="background:#11111b;border:1px solid #313244;border-radius:6px;padding:8px;font-family:monospace;font-size:12px;color:#a6adc8;max-height:140px;overflow-y:auto;margin-bottom:10px;"></div>
+
+                    <!-- Screenshots -->
+                    <div id="manualScreenshots" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
                 </div>
             </div>
 

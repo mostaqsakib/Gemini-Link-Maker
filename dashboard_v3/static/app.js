@@ -2068,3 +2068,166 @@ async function loadAirtelScreenshots() {
 }
 
 // initAirtelBatch is called from the main DOMContentLoaded block above
+
+// ─── Manual Airtel Test Tool ───────────────────────────────────────────────
+
+let _manualSessionId = null;
+let _manualPollTimer = null;
+
+// Tab switch trigger
+const _origInitTabs = window._origInitTabs;
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            if (btn.dataset.tab === 'airtel-manual') {
+                btn.addEventListener('click', () => manualScanDevices());
+            }
+        });
+    }, 1000);
+});
+
+async function manualScanDevices() {
+    const list = document.getElementById('manualDeviceList');
+    if (!list) return;
+    list.innerHTML = '<p style="color:#a6adc8;font-size:13px;">⏳ Scanning Firebase...</p>';
+    try {
+        const resp = await fetch('/api/airtel-manual/devices', { cache: 'no-store' });
+        const data = await resp.json();
+        if (data.error) { list.innerHTML = `<p style="color:#f38ba8;">${data.error}</p>`; return; }
+        const devices = data.devices || [];
+        if (!devices.length) { list.innerHTML = '<p style="color:#6c7086;font-size:13px;">No devices found.</p>'; return; }
+        list.innerHTML = devices.map(d => `
+            <div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:#1e1e2e;border-radius:5px;border:1px solid #313244;">
+                <span style="font-family:monospace;font-size:13px;color:#cdd6f4;flex:1;">📱 +91${d.phone}</span>
+                <span style="font-size:11px;color:#6c7086;">${d.db_name}</span>
+                <button class="btn-secondary" style="padding:2px 10px;font-size:12px;"
+                    onclick='manualStartSession(${JSON.stringify(d)})'>Test</button>
+            </div>
+        `).join('');
+        addLog(`🔬 Found ${devices.length} Firebase devices`, 'info');
+    } catch(e) {
+        list.innerHTML = `<p style="color:#f38ba8;">Error: ${e.message}</p>`;
+    }
+}
+
+async function manualStartSession(device) {
+    const panel = document.getElementById('manualSessionPanel');
+    const phoneEl = document.getElementById('manualSessionPhone');
+    const statusEl = document.getElementById('manualSessionStatus');
+    const logEl = document.getElementById('manualLog');
+    const ssEl = document.getElementById('manualScreenshots');
+    const otpRow = document.getElementById('manualOtpRow');
+
+    if (panel) panel.style.display = 'block';
+    if (phoneEl) phoneEl.textContent = `+91${device.phone}`;
+    if (logEl) logEl.innerHTML = '';
+    if (ssEl) ssEl.innerHTML = '';
+    if (otpRow) otpRow.style.display = 'none';
+
+    manualSetStatus('Starting...', '#6c7086');
+    addLog(`🔬 Manual test starting for +91${device.phone}`, 'info');
+
+    try {
+        const resp = await fetch('/api/airtel-manual/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone: device.phone, device_id: device.device_id, fb_url: device.fb_url })
+        });
+        const data = await resp.json();
+        if (data.error) { manualSetStatus(`Error: ${data.error}`, '#f38ba8'); return; }
+        _manualSessionId = data.session_id;
+        manualSetStatus('Sending OTP...', '#89b4fa');
+        manualStartPolling();
+    } catch(e) {
+        manualSetStatus(`Error: ${e.message}`, '#f38ba8');
+    }
+}
+
+function manualSetStatus(text, color) {
+    const el = document.getElementById('manualSessionStatus');
+    if (el) { el.textContent = text; el.style.color = color || '#cdd6f4'; }
+}
+
+function manualStartPolling() {
+    if (_manualPollTimer) clearInterval(_manualPollTimer);
+    _manualPollTimer = setInterval(manualPollStatus, 2000);
+}
+
+async function manualPollStatus() {
+    if (!_manualSessionId) return;
+    try {
+        const resp = await fetch(`/api/airtel-manual/status/${_manualSessionId}`, { cache: 'no-store' });
+        const data = await resp.json();
+        manualUpdateLog(data.log || []);
+        manualUpdateScreenshots(data.screenshots || []);
+
+        if (data.status === 'otp_received') {
+            manualSetStatus(`OTP: ${data.otp} — Submit to continue`, '#a6e3a1');
+            const inp = document.getElementById('manualOtpInput');
+            if (inp) inp.value = data.otp;
+            const otpRow = document.getElementById('manualOtpRow');
+            if (otpRow) otpRow.style.display = 'flex';
+        } else if (data.status === 'otp_timeout') {
+            manualSetStatus('OTP timeout — enter manually', '#fab387');
+            const otpRow = document.getElementById('manualOtpRow');
+            if (otpRow) otpRow.style.display = 'flex';
+        } else if (data.status === 'waiting_otp') {
+            manualSetStatus('Waiting for OTP...', '#89b4fa');
+        } else if (data.status === 'done') {
+            const hasDuo = data.has_duolingo;
+            manualSetStatus(hasDuo ? '✅ Duolingo offer found!' : '❌ No Duolingo offer', hasDuo ? '#a6e3a1' : '#f38ba8');
+            clearInterval(_manualPollTimer);
+        } else if (data.status === 'error') {
+            manualSetStatus('Error — check log', '#f38ba8');
+            clearInterval(_manualPollTimer);
+        }
+    } catch(e) {}
+}
+
+function manualUpdateLog(lines) {
+    const el = document.getElementById('manualLog');
+    if (!el) return;
+    el.innerHTML = lines.map(l => `<div>${escapeHtml(l)}</div>`).join('');
+    el.scrollTop = el.scrollHeight;
+}
+
+function manualUpdateScreenshots(screenshots) {
+    const el = document.getElementById('manualScreenshots');
+    if (!el || !screenshots.length) return;
+    el.innerHTML = screenshots.map(ss => `
+        <div style="text-align:center;">
+            <p style="font-size:10px;color:#6c7086;margin:0 0 3px;">${escapeHtml(ss.label)}</p>
+            <a href="/api/airtel-manual/screenshot/${ss.file}" target="_blank">
+                <img src="/api/airtel-manual/screenshot/${ss.file}?t=${Date.now()}"
+                    style="width:200px;border-radius:4px;border:1px solid #45475a;"
+                    onerror="this.style.display='none'">
+            </a>
+        </div>
+    `).join('');
+}
+
+async function manualSubmitOtp() {
+    const otp = document.getElementById('manualOtpInput')?.value?.trim();
+    if (!otp || !_manualSessionId) return;
+    manualSetStatus('Submitting OTP...', '#89b4fa');
+    const otpRow = document.getElementById('manualOtpRow');
+    if (otpRow) otpRow.style.display = 'none';
+    try {
+        const resp = await fetch('/api/airtel-manual/submit-otp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ session_id: _manualSessionId, otp })
+        });
+        const data = await resp.json();
+        manualUpdateLog(data.log || []);
+        manualUpdateScreenshots(data.screenshots || []);
+        if (data.has_duolingo) {
+            manualSetStatus('✅ Duolingo offer found!', '#a6e3a1');
+        } else {
+            manualSetStatus('❌ No Duolingo offer on this number', '#f38ba8');
+        }
+        clearInterval(_manualPollTimer);
+    } catch(e) {
+        manualSetStatus(`Error: ${e.message}`, '#f38ba8');
+    }
+}
