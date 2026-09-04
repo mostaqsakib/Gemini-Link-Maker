@@ -146,6 +146,7 @@
                 <button class="tab-btn" data-tab="display">Display</button>
                 <button class="tab-btn" data-tab="links">Links <span class="order-count" id="tabLinkCount">0</span></button>
                 <button class="tab-btn" data-tab="proxies">Proxies <span class="order-count" id="tabProxyCount">0</span></button>
+                <button class="tab-btn" data-tab="airtel">🦉 Airtel <span class="order-count" id="tabDuoCount">0</span></button>
                 <button class="btn-icon tab-refresh" id="refreshOrders" title="Refresh">↻</button>
             </div>
 
@@ -195,6 +196,42 @@
             </div>
 
             <!-- Proxies Tab -->
+            <!-- Airtel Duolingo Tab -->
+            <div class="tab-content" id="tab-airtel">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+                    <span>🦉 Duolingo Links: <strong id="duoLinkCount">0</strong></span>
+                    <div style="display:flex;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap;">
+                        <label style="font-size:12px;">Concurrency:
+                            <input id="airtelConcurrency" type="number" min="1" max="5" value="2"
+                                style="width:50px;padding:2px 4px;border-radius:4px;border:1px solid #333;background:#1e1e2e;color:#cdd6f4;">
+                        </label>
+                        <label style="font-size:12px;">Delay (s):
+                            <input id="airtelDelay" type="number" min="3" max="60" value="10"
+                                style="width:55px;padding:2px 4px;border-radius:4px;border:1px solid #333;background:#1e1e2e;color:#cdd6f4;">
+                        </label>
+                        <button class="btn-secondary" id="startAirtelBatch" style="background:#3b82f6;color:#fff;">▶ Start</button>
+                        <button class="btn-secondary" id="stopAirtelBatch" style="background:#ef4444;color:#fff;">⏹ Stop</button>
+                        <button class="btn-secondary" id="copyAllDuoLinks">📋 Copy All</button>
+                        <button class="btn-secondary" id="downloadDuoLinks" style="background:#10b981;color:#fff;">⬇️ Download CSV</button>
+                        <button class="btn-secondary" id="clearDuoLinks" style="background:#6b7280;color:#fff;">🗑 Clear</button>
+                    </div>
+                </div>
+                <!-- Progress bar -->
+                <div id="airtelProgressBar" style="display:none;margin-bottom:10px;">
+                    <div style="font-size:12px;color:#a6adc8;margin-bottom:4px;">
+                        <span id="airtelProgressText">Checking 0 / 0</span>
+                        <span id="airtelETA" style="margin-left:12px;"></span>
+                    </div>
+                    <div style="background:#313244;border-radius:6px;height:8px;overflow:hidden;">
+                        <div id="airtelProgressFill" style="height:100%;background:#3b82f6;width:0%;transition:width 0.4s;"></div>
+                    </div>
+                </div>
+                <div class="links-container" id="duoLinksContainer"
+                    style="max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
+                    <p style="color:#6c7086;font-size:13px;">No Duolingo links yet. Start the batch to extract links.</p>
+                </div>
+            </div>
+
             <div class="tab-content" id="tab-proxies">
                 <div class="display-toolbar">
                     <span>Proxy Health: <strong id="proxyTabCount">0</strong> total | <strong id="proxyLiveCount">0</strong> live | Max <strong id="proxyLatencyLimit">2500</strong>ms</span>

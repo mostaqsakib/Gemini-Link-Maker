@@ -4,6 +4,7 @@ let batchCount = 1;
 let selectedProviders = ['FirebaseDirect'];
 let orders = {};
 let savedLinks = [];
+let duoLinks = [];
 let linkCheckStatus = {};
 let linkCheckStats = { live: 0, used: 0, expired: 0, invalid: 0, error: 0, left: 0, total: 0 };
 let proxyRows = [];
@@ -131,6 +132,40 @@ function initSocket() {
         if (data.link && !savedLinks.includes(data.link)) savedLinks.unshift(data.link);
         updateLinkCounters(data.count || savedLinks.length);
         if (document.getElementById('tab-links')?.classList.contains('active')) renderSavedLinks();
+    });
+
+    // ── Airtel Duolingo events ──────────────────────────────────────────────
+    socket.on('duolingo_link_saved', (data) => {
+        if (data.link && !duoLinks.includes(data.link)) duoLinks.unshift(data.link);
+        updateDuoCount(data.count || duoLinks.length);
+        if (document.getElementById('tab-airtel')?.classList.contains('active')) renderDuoLinks();
+        addLog(`🦉 Duolingo link saved: ${data.phone}`, 'success');
+    });
+
+    socket.on('airtel_links_data', (data) => {
+        duoLinks = data.links || [];
+        updateDuoCount(data.count || duoLinks.length);
+        renderDuoLinks();
+    });
+
+    socket.on('airtel_batch_status', (data) => {
+        const startBtn = document.getElementById('startAirtelBatch');
+        const stopBtn  = document.getElementById('stopAirtelBatch');
+        if (startBtn) startBtn.disabled = !!data.running;
+        if (stopBtn)  stopBtn.disabled  = !data.running;
+    });
+
+    socket.on('airtel_batch_progress', (data) => {
+        const bar  = document.getElementById('airtelProgressBar');
+        const fill = document.getElementById('airtelProgressFill');
+        const txt  = document.getElementById('airtelProgressText');
+        const eta  = document.getElementById('airtelETA');
+        if (!bar) return;
+        bar.style.display = 'block';
+        const pct = data.total > 0 ? Math.round((data.checked / data.total) * 100) : 0;
+        if (fill) fill.style.width = pct + '%';
+        if (txt)  txt.textContent  = `Checking ${data.checked} / ${data.total} (${pct}%)`;
+        if (eta)  eta.textContent  = data.eta_minutes > 0 ? `ETA ~${data.eta_minutes}m | ${data.tpm} TPM` : '';
     });
 
     socket.on('batch_progress', (data) => {
@@ -448,6 +483,7 @@ function initTabs() {
             if (btn.dataset.tab === 'display') renderProcessDisplay();
             if (btn.dataset.tab === 'links') loadSavedLinks();
             if (btn.dataset.tab === 'proxies') loadProxyList();
+            if (btn.dataset.tab === 'airtel') loadDuoLinks();
         });
     });
 }
@@ -1889,3 +1925,109 @@ function parseBulkFirebase() {
         document.getElementById('firebaseDbList')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 }
+
+// ─── Airtel Duolingo Functions ─────────────────────────────────────────────
+
+function updateDuoCount(count) {
+    const val = count || 0;
+    const tab = document.getElementById('tabDuoCount');
+    const inner = document.getElementById('duoLinkCount');
+    if (tab) tab.textContent = val;
+    if (inner) inner.textContent = val;
+}
+
+async function loadDuoLinks() {
+    if (duoLinks.length) renderDuoLinks();
+    try {
+        const resp = await fetch('/api/airtel-links', { cache: 'no-store' });
+        const data = await resp.json();
+        const serverLinks = data.links || [];
+        const seen = new Set(serverLinks);
+        const merged = [...serverLinks];
+        for (const l of duoLinks) {
+            if (l && !seen.has(l)) { merged.push(l); seen.add(l); }
+        }
+        duoLinks = merged;
+        updateDuoCount(duoLinks.length);
+        renderDuoLinks();
+    } catch (err) {
+        renderDuoLinks();
+        addLog(`Failed to load Duolingo links: ${err.message}`, 'error');
+    }
+}
+
+function renderDuoLinks() {
+    const container = document.getElementById('duoLinksContainer');
+    if (!container) return;
+    updateDuoCount(duoLinks.length);
+    if (!duoLinks.length) {
+        container.innerHTML = `<p style="color:#6c7086;font-size:13px;">No Duolingo links yet. Start the batch to extract links.</p>`;
+        return;
+    }
+    container.innerHTML = duoLinks.map((link, i) => {
+        // Extract code from URL for display: duolingo.com/redeem?code=AIRTELLIVE...
+        const codeMatch = link.match(/[?&]code=([^&]+)/);
+        const codeLabel = codeMatch ? codeMatch[1] : link;
+        return `
+        <div class="saved-link-row" style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:#1e1e2e;border-radius:6px;border:1px solid #313244;">
+            <span class="saved-link-index" style="color:#6c7086;min-width:24px;">${i + 1}</span>
+            <a class="saved-link-text" href="${escapeAttr(link)}" target="_blank" rel="noopener noreferrer"
+                style="flex:1;font-size:12px;color:#89b4fa;text-decoration:none;word-break:break-all;">
+                🦉 ${escapeHtml(codeLabel)}
+            </a>
+            <div style="display:flex;gap:6px;flex-shrink:0;">
+                <button class="btn-secondary" style="padding:2px 8px;font-size:11px;"
+                    onclick="navigator.clipboard.writeText('${escapeAttr(link)}');addLog('Copied!','success')">Copy</button>
+                <button class="btn-secondary" style="padding:2px 8px;font-size:11px;"
+                    onclick="window.open('${escapeAttr(link)}','_blank')">Open</button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function initAirtelBatch() {
+    const startBtn = document.getElementById('startAirtelBatch');
+    const stopBtn  = document.getElementById('stopAirtelBatch');
+    const copyBtn  = document.getElementById('copyAllDuoLinks');
+    const dlBtn    = document.getElementById('downloadDuoLinks');
+    const clearBtn = document.getElementById('clearDuoLinks');
+
+    startBtn?.addEventListener('click', () => {
+        const concurrency = parseInt(document.getElementById('airtelConcurrency')?.value || '2');
+        const delay       = parseFloat(document.getElementById('airtelDelay')?.value || '10');
+        socket.emit('start_airtel_batch', { concurrency, delay });
+        startBtn.disabled = true;
+        addLog(`🚀 Airtel Duolingo batch starting (concurrency=${concurrency}, delay=${delay}s)...`, 'info');
+    });
+
+    stopBtn?.addEventListener('click', () => {
+        socket.emit('stop_airtel_batch');
+        if (stopBtn) stopBtn.disabled = true;
+        addLog('⏹ Stopping Airtel batch...', 'warn');
+    });
+
+    copyBtn?.addEventListener('click', () => {
+        if (!duoLinks.length) { addLog('No Duolingo links to copy', 'warn'); return; }
+        navigator.clipboard.writeText(duoLinks.join('\n'));
+        addLog(`📋 Copied ${duoLinks.length} Duolingo links`, 'success');
+    });
+
+    dlBtn?.addEventListener('click', () => {
+        window.location.href = '/download/airtel-success';
+    });
+
+    clearBtn?.addEventListener('click', () => {
+        if (!confirm(`Clear all ${duoLinks.length} Duolingo links?`)) return;
+        socket.emit('clear_airtel_links');
+        duoLinks = [];
+        renderDuoLinks();
+        updateDuoCount(0);
+        addLog('🗑 Duolingo links cleared', 'info');
+    });
+}
+
+// Call init when DOM is ready (append to existing DOMContentLoaded flow)
+document.addEventListener('DOMContentLoaded', () => {
+    // Small delay so main initApp() runs first and socket is set up
+    setTimeout(initAirtelBatch, 500);
+});
