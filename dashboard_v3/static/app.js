@@ -1986,45 +1986,37 @@ function renderDuoLinks() {
     }).join('');
 }
 
+function airtelStart() {
+    const concurrency = parseInt(document.getElementById('airtelConcurrency')?.value || '2');
+    const delay       = parseFloat(document.getElementById('airtelDelay')?.value || '10');
+    console.log('[Airtel] emitting start_airtel_batch', { concurrency, delay });
+    socket.emit('start_airtel_batch', { concurrency, delay });
+    addLog(`🚀 Airtel Duolingo batch starting (concurrency=${concurrency}, delay=${delay}s)...`, 'info');
+}
+
+function airtelStop() {
+    socket.emit('stop_airtel_batch');
+    addLog('⏹ Stopping Airtel batch...', 'warn');
+}
+
+function airtelCopyAll() {
+    if (!duoLinks.length) { addLog('No Duolingo links to copy', 'warn'); return; }
+    navigator.clipboard.writeText(duoLinks.join('\n'));
+    addLog(`📋 Copied ${duoLinks.length} Duolingo links`, 'success');
+}
+
+function airtelClear() {
+    if (!confirm(`Clear all ${duoLinks.length} Duolingo links?`)) return;
+    socket.emit('clear_airtel_links');
+    duoLinks = [];
+    renderDuoLinks();
+    updateDuoCount(0);
+    addLog('🗑 Duolingo links cleared', 'info');
+}
+
 function initAirtelBatch() {
-    const startBtn = document.getElementById('startAirtelBatch');
-    const stopBtn  = document.getElementById('stopAirtelBatch');
-    const copyBtn  = document.getElementById('copyAllDuoLinks');
-    const dlBtn    = document.getElementById('downloadDuoLinks');
-    const clearBtn = document.getElementById('clearDuoLinks');
-
-    startBtn?.addEventListener('click', () => {
-        const concurrency = parseInt(document.getElementById('airtelConcurrency')?.value || '2');
-        const delay       = parseFloat(document.getElementById('airtelDelay')?.value || '10');
-        socket.emit('start_airtel_batch', { concurrency, delay });
-        startBtn.disabled = true;
-        addLog(`🚀 Airtel Duolingo batch starting (concurrency=${concurrency}, delay=${delay}s)...`, 'info');
-    });
-
-    stopBtn?.addEventListener('click', () => {
-        socket.emit('stop_airtel_batch');
-        if (stopBtn) stopBtn.disabled = true;
-        addLog('⏹ Stopping Airtel batch...', 'warn');
-    });
-
-    copyBtn?.addEventListener('click', () => {
-        if (!duoLinks.length) { addLog('No Duolingo links to copy', 'warn'); return; }
-        navigator.clipboard.writeText(duoLinks.join('\n'));
-        addLog(`📋 Copied ${duoLinks.length} Duolingo links`, 'success');
-    });
-
-    dlBtn?.addEventListener('click', () => {
-        window.location.href = '/download/airtel-success';
-    });
-
-    clearBtn?.addEventListener('click', () => {
-        if (!confirm(`Clear all ${duoLinks.length} Duolingo links?`)) return;
-        socket.emit('clear_airtel_links');
-        duoLinks = [];
-        renderDuoLinks();
-        updateDuoCount(0);
-        addLog('🗑 Duolingo links cleared', 'info');
-    });
+    // Kept for compatibility — buttons now use inline onclick
+    console.log('[Airtel] initAirtelBatch called');
 }
 
 // initAirtelBatch is called from the main DOMContentLoaded block above

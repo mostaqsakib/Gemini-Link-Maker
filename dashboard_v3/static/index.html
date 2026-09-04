@@ -209,11 +209,11 @@
                             <input id="airtelDelay" type="number" min="3" max="60" value="10"
                                 style="width:55px;padding:2px 4px;border-radius:4px;border:1px solid #333;background:#1e1e2e;color:#cdd6f4;">
                         </label>
-                        <button class="btn-secondary" id="startAirtelBatch" style="background:#3b82f6;color:#fff;">▶ Start</button>
-                        <button class="btn-secondary" id="stopAirtelBatch" style="background:#ef4444;color:#fff;">⏹ Stop</button>
-                        <button class="btn-secondary" id="copyAllDuoLinks">📋 Copy All</button>
-                        <button class="btn-secondary" id="downloadDuoLinks" style="background:#10b981;color:#fff;">⬇️ Download CSV</button>
-                        <button class="btn-secondary" id="clearDuoLinks" style="background:#6b7280;color:#fff;">🗑 Clear</button>
+                        <button class="btn-secondary" id="startAirtelBatch" style="background:#3b82f6;color:#fff;" onclick="airtelStart()">▶ Start</button>
+                        <button class="btn-secondary" id="stopAirtelBatch" style="background:#ef4444;color:#fff;" onclick="airtelStop()">⏹ Stop</button>
+                        <button class="btn-secondary" id="copyAllDuoLinks" onclick="airtelCopyAll()">📋 Copy All</button>
+                        <button class="btn-secondary" id="downloadDuoLinks" style="background:#10b981;color:#fff;" onclick="window.location.href='/download/airtel-success'">⬇️ Download CSV</button>
+                        <button class="btn-secondary" id="clearDuoLinks" style="background:#6b7280;color:#fff;" onclick="airtelClear()">🗑 Clear</button>
                     </div>
                 </div>
                 <!-- Progress bar -->
