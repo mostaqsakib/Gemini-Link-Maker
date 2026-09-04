@@ -3629,14 +3629,27 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
         await emit_order(order)
 
         browser_instance = await get_airtel_browser()
-        context = await browser_instance.new_context(
-            user_agent=(
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            ),
-            viewport={"width": 1280, "height": 800},
-        )
+        try:
+            context = await browser_instance.new_context(
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 Safari/537.36"
+                ),
+                viewport={"width": 1280, "height": 800},
+            )
+        except Exception:
+            # Browser crashed — relaunch and retry once
+            state.airtel_browser = None
+            browser_instance = await get_airtel_browser()
+            context = await browser_instance.new_context(
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/124.0.0.0 Safari/537.36"
+                ),
+                viewport={"width": 1280, "height": 800},
+            )
         page = await context.new_page()
         state.airtel_active_count += 1
 
@@ -3796,16 +3809,15 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
         # Click Submit — try each selector
         submit_clicked = False
         for sel in [
-            'button:has-text("Send OTP")',
+            'button:has-text("LOGIN")',
+            'button:has-text("Login")',
             'button:has-text("Verify")',
             'button:has-text("VERIFY")',
             'button:has-text("Submit")',
             'button:has-text("SUBMIT")',
-            'button:has-text("Login")',
-            'button:has-text("LOGIN")',
             'button:has-text("Continue")',
             'button:has-text("Confirm")',
-            'button[type="submit"]',
+            'button:has-text("Send OTP")',
         ]:
             try:
                 el = page.locator(sel).first
@@ -3819,11 +3831,17 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
                 continue
 
         if not submit_clicked:
-            # Last resort: click first visible button
+            # Fallback: click first visible submit-type button (skip EDIT/RESEND)
             try:
-                await page.locator('button:visible').first.click()
-                submit_clicked = True
-                await emit_log(f"[Airtel/{clean_phone}] Submit: clicked first visible button", "warn")
+                btns = await page.locator('button[type="submit"]:visible').all()
+                for btn in btns:
+                    txt = (await btn.inner_text()).strip().upper()
+                    if txt in ("EDIT", "RESEND OTP", "GET APP", "RESEND"):
+                        continue
+                    await btn.click()
+                    submit_clicked = True
+                    await emit_log(f"[Airtel/{clean_phone}] Submit: clicked submit btn '{txt}'", "warn")
+                    break
             except Exception as e:
                 await emit_log(f"[Airtel/{clean_phone}] ❌ No submit button found: {e}", "error")
                 raise Exception("Submit button not found")
