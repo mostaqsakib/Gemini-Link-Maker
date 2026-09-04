@@ -3623,28 +3623,62 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
         state.airtel_active_count += 1
 
         await page.goto(AIRTEL_LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
-        await asyncio.sleep(2)
+        await asyncio.sleep(3)
+
+        # Debug: log page title and URL to confirm load
+        page_title = await page.title()
+        await emit_log(f"[Airtel/{clean_phone}] Page loaded: '{page_title}' at {page.url}", "info")
 
         # ── Step 2: Enter mobile number ────────────────────────────────────────
         order_event(order, f"Entering phone number: {clean_phone}")
         await emit_order(order)
 
-        # Airtel login: input[type=tel] or input[placeholder*="Mobile"]
-        phone_sel = 'input[type="tel"], input[placeholder*="Mobile"], input[placeholder*="mobile"], input[name="mobileNumber"], input[id*="mobile"]'
-        await page.locator(phone_sel).first.wait_for(state="visible", timeout=30000)
-        await page.locator(phone_sel).first.fill(clean_phone)
+        # Airtel login: try multiple selectors
+        phone_sel = (
+            'input[type="tel"], input[placeholder*="Mobile"], input[placeholder*="mobile"], '
+            'input[placeholder*="mobile number"], input[placeholder*="Enter mobile"], '
+            'input[name="mobileNumber"], input[id*="mobile"], input[id*="phone"], '
+            'input[autocomplete="tel"]'
+        )
+        try:
+            await page.locator(phone_sel).first.wait_for(state="visible", timeout=20000)
+            await page.locator(phone_sel).first.fill(clean_phone)
+            await emit_log(f"[Airtel/{clean_phone}] Phone number filled", "info")
+        except Exception as e:
+            # Log all inputs on page for debugging
+            all_inputs = await page.evaluate("""
+                () => Array.from(document.querySelectorAll('input')).map(i => ({
+                    type: i.type, name: i.name, id: i.id,
+                    placeholder: i.placeholder, class: i.className.substring(0,50)
+                }))
+            """)
+            await emit_log(f"[Airtel/{clean_phone}] Phone input not found. Inputs on page: {all_inputs}", "error")
+            raise Exception(f"Phone input not found: {e}")
+
         await asyncio.sleep(1)
 
-        # Click "Get OTP" / "Send OTP" / "Generate OTP"
+        # Click "Get OTP" / "Send OTP"
         otp_btn_sel = (
             'button:has-text("Get OTP"), button:has-text("Send OTP"), '
             'button:has-text("Generate OTP"), button:has-text("REQUEST OTP"), '
-            '[data-testid*="otp"], [class*="get-otp"], [class*="sendOtp"]'
+            'button:has-text("SEND OTP"), button:has-text("Verify"), '
+            '[data-testid*="otp"], [class*="get-otp"], [class*="sendOtp"], '
+            'button[type="submit"]'
         )
-        await page.locator(otp_btn_sel).first.wait_for(state="visible", timeout=15000)
-        await page.locator(otp_btn_sel).first.click()
-        await emit_log(f"[Airtel/{clean_phone}] OTP request sent to Airtel", "info")
-        await asyncio.sleep(2)
+        try:
+            await page.locator(otp_btn_sel).first.wait_for(state="visible", timeout=10000)
+            await page.locator(otp_btn_sel).first.click()
+            await emit_log(f"[Airtel/{clean_phone}] OTP button clicked", "info")
+        except Exception as e:
+            # Log all buttons for debugging
+            all_btns = await page.evaluate("""
+                () => Array.from(document.querySelectorAll('button')).map(b => ({
+                    text: b.innerText.substring(0,30), type: b.type,
+                    class: b.className.substring(0,50)
+                }))
+            """)
+            await emit_log(f"[Airtel/{clean_phone}] OTP button not found. Buttons: {all_btns}", "error")
+            raise Exception(f"OTP button not found: {e}")
 
         # ── Step 3: Poll Firebase for OTP ──────────────────────────────────────
         order["status"] = "waiting_otp"
