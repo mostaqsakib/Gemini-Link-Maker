@@ -559,7 +559,7 @@ class State:
     active_browsers = 0
     jio_count = 0
     jio_count_lock = None  # initialized on first use
-    target_count = 5
+    target_count = 1000
     stats = {"fetched": 0, "jio": 0, "otp": 0, "login": 0, "otp_times": []}
     system_monitor_task = None
     omkar_gen_stop = False
@@ -2443,23 +2443,20 @@ async def firebase_sniper_worker(speed_delay, scan_mode="deep"):
 
 # ─── Sniper Workers ──────────────────────────────────────────────────────────
 async def sniper_worker(p_name, speed_delay):
-    delay = config["providers"].get(p_name, {}).get("delay", 3) * speed_delay
-
+    # Each worker continuously buys numbers — no delay, no cap
     while not state.stop_event.is_set():
-        if state.jio_count >= state.target_count:
-            await asyncio.sleep(delay)
+        if state.pause_event and state.pause_event.is_set():
+            await asyncio.sleep(1)
             continue
-
-        state.jio_count += 1
         try:
             result = await buy_number(p_name)
             if result["status"] == "success":
+                state.jio_count += 1
                 asyncio.create_task(process_number(p_name, result["aid"], result["phone"]))
             else:
-                state.jio_count -= 1
-        except:
-            state.jio_count -= 1
-        await asyncio.sleep(delay)
+                await asyncio.sleep(0.3)
+        except Exception:
+            await asyncio.sleep(0.3)
 
 # ─── Socket.IO Events ────────────────────────────────────────────────────────
 @sio.on('connect')
@@ -2486,7 +2483,7 @@ async def on_connect(sid, environ):
 @sio.on('get_balances')
 async def on_get_balances(sid):
     if not state.http_session:
-        state.http_session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=30, limit_per_host=10, enable_cleanup_closed=True))
+        state.http_session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=2000, limit_per_host=1000, enable_cleanup_closed=True))
     balances = {}
     for p in config["providers"]:
         bal = await get_balance(p)
@@ -2515,7 +2512,7 @@ async def on_start_sniping(sid, data):
     })
 
     if not state.http_session:
-        state.http_session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=30, limit_per_host=10, enable_cleanup_closed=True))
+        state.http_session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=2000, limit_per_host=1000, enable_cleanup_closed=True))
 
     if "otp_delay" in data:
         global BROWSER_LAUNCH_INTERVAL, OTP_CLICK_INTERVAL
@@ -2754,7 +2751,7 @@ async def on_resume_sniping(sid):
             state.pause_event = asyncio.Event()  # clear = not paused
             state.pause_reason = ""
             if not state.http_session:
-                state.http_session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=30, limit_per_host=10, enable_cleanup_closed=True))
+                state.http_session = aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=2000, limit_per_host=1000, enable_cleanup_closed=True))
 
             speed_delay = SPEED_MAP.get("normal", 1.0)
             task = asyncio.create_task(firebase_sniper_worker(speed_delay, scan_mode="deep"))

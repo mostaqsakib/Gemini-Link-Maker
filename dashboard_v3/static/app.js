@@ -313,7 +313,7 @@ function initControls() {
         document.getElementById('batchCount').textContent = batchCount;
     });
     document.getElementById('countUp').addEventListener('click', () => {
-        if (batchCount < 20) batchCount++;
+        if (batchCount < 1000) batchCount++;
         document.getElementById('batchCount').textContent = batchCount;
     });
 
