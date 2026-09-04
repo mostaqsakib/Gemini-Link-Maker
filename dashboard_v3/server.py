@@ -3570,8 +3570,16 @@ async def get_airtel_browser():
     state.airtel_pw = await async_playwright().start()
     state.airtel_browser = await state.airtel_pw.chromium.launch(
         headless=headless,
-        args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage",
-              "--disable-gpu", "--single-process"],
+        args=[
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-dev-shm-usage",
+            "--disable-gpu",
+            "--disable-software-rasterizer",
+            "--disable-extensions",
+            "--no-first-run",
+            "--no-zygote",
+        ],
     )
     await emit_log(f"[Airtel] Browser launched (headless={headless})", "info")
     return state.airtel_browser
