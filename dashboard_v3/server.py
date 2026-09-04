@@ -2572,8 +2572,9 @@ async def on_start_sniping(sid, data):
                 scan_mode = "deep" if data["deep_scan"] else "normal"
             state.sniper_tasks.append(asyncio.create_task(firebase_sniper_worker(speed_delay, scan_mode=scan_mode)))
         elif p in config["providers"]:
-            # Launch multiple parallel workers per provider based on browser_count
-            worker_count = max(1, min(data.get("batch_size", 1), 10))
+            # Launch parallel workers per provider based on browser_count
+            worker_count = max(1, int(data.get("batch_size", 1)))
+            await emit_log(f"Launching {worker_count} workers for {p}...", "info")
             for _ in range(worker_count):
                 state.sniper_tasks.append(asyncio.create_task(sniper_worker(p, speed_delay)))
 
