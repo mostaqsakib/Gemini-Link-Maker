@@ -3670,8 +3670,6 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
         await asyncio.sleep(3)
 
         # Debug screenshot — step 0: page loaded
-        ss_path = os.path.join(DATA_DIR, f"airtel_debug_{clean_phone}.png")
-        await page.screenshot(path=ss_path, full_page=True)
 
         # Debug: log page title, URL, and all input HTML
         page_title = await page.title()
@@ -3719,9 +3717,6 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
             await emit_log(f"[Airtel/{clean_phone}] ❌ Could not fill phone. Raw inputs: {all_inputs_html[:800]}", "error")
             raise Exception("Phone input not found with any selector")
 
-        # Screenshot after fill
-        ss2_path = os.path.join(DATA_DIR, f"airtel_debug_{clean_phone}_filled.png")
-        await page.screenshot(path=ss2_path, full_page=True)
         await asyncio.sleep(1)
 
         # Click OTP button — try each selector
@@ -3760,9 +3755,6 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
             raise Exception("OTP button not found")
 
         await asyncio.sleep(3)
-        # Screenshot after OTP click
-        ss3_path = os.path.join(DATA_DIR, f"airtel_debug_{clean_phone}_otp_clicked.png")
-        await page.screenshot(path=ss3_path, full_page=True)
 
         # ── Step 3: Poll Firebase for OTP ──────────────────────────────────────
         order["status"] = "waiting_otp"
@@ -3784,8 +3776,6 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
         order_event(order, "Entering OTP...")
         await emit_order(order)
 
-        # Screenshot before OTP entry
-        await page.screenshot(path=os.path.join(DATA_DIR, f"airtel_debug_{clean_phone}_otp_page.png"), full_page=True)
 
         # Log all inputs and buttons on OTP page
         otp_page_info = await page.evaluate("""
@@ -3860,7 +3850,6 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
                 raise Exception("Submit button not found")
 
         await asyncio.sleep(3)
-        await page.screenshot(path=os.path.join(DATA_DIR, f"airtel_debug_{clean_phone}_after_submit.png"), full_page=True)
         await emit_log(f"[Airtel/{clean_phone}] OTP submitted — logged in", "info")
 
         # ── Step 5: Navigate to Thanks page ───────────────────────────────────
@@ -4314,30 +4303,8 @@ async def on_clear_airtel_links(sid, data=None):
     await sio.emit("airtel_links_data", {"links": [], "count": 0})
     await emit_log("[Airtel] Duolingo links cleared.", "info")
 
-@app.get("/api/airtel-screenshot/{phone}/{suffix}")
-async def get_airtel_screenshot_suffix(phone: str, suffix: str):
-    from fastapi.responses import FileResponse
-    ss_path = os.path.join(DATA_DIR, f"airtel_debug_{phone}_{suffix}.png")
-    if not os.path.exists(ss_path):
-        return Response(content="No screenshot", media_type="text/plain", status_code=404)
-    return FileResponse(ss_path, media_type="image/png")
 
-@app.get("/api/airtel-screenshot/{phone}")
-async def get_airtel_screenshot(phone: str):
-    from fastapi.responses import FileResponse
-    ss_path = os.path.join(DATA_DIR, f"airtel_debug_{phone}.png")
-    if not os.path.exists(ss_path):
-        return Response(content="No screenshot yet", media_type="text/plain", status_code=404)
-    return FileResponse(ss_path, media_type="image/png")
 
-@app.get("/api/airtel-screenshots")
-async def list_airtel_screenshots():
-    files = [f for f in os.listdir(DATA_DIR) if f.startswith("airtel_debug_") and f.endswith(".png")]
-    phones = set()
-    for f in files:
-        parts = f.replace("airtel_debug_","").replace(".png","").split("_")
-        phones.add(parts[0])
-    return {"screenshots": sorted(phones)}
 
 @app.get("/api/airtel-links")
 async def api_get_airtel_links():
@@ -4452,10 +4419,6 @@ async def airtel_manual_start(request: Request):
             await page.goto(AIRTEL_LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
             await asyncio.sleep(3)
 
-            # Screenshot 1
-            ss1 = os.path.join(DATA_DIR, f"manual_{session_id}_1_loaded.png")
-            await page.screenshot(path=ss1, full_page=True)
-            sess["screenshots"].append({"label": "Page loaded", "file": f"manual_{session_id}_1_loaded.png"})
             log(f"Page loaded: {page.url}")
 
             # Fill phone
@@ -4501,11 +4464,7 @@ async def airtel_manual_start(request: Request):
                 sess["status"] = "error"
                 return
 
-            # Screenshot 2
             await asyncio.sleep(2)
-            ss2 = os.path.join(DATA_DIR, f"manual_{session_id}_2_otp_sent.png")
-            await page.screenshot(path=ss2, full_page=True)
-            sess["screenshots"].append({"label": "After OTP request", "file": f"manual_{session_id}_2_otp_sent.png"})
 
             sess["status"] = "waiting_otp"
             log("⏳ Waiting for OTP from Firebase (90s)...")
@@ -4574,18 +4533,12 @@ async def airtel_manual_submit_otp(request: Request):
                 continue
 
         await asyncio.sleep(3)
-        ss3 = os.path.join(DATA_DIR, f"manual_{session_id}_3_after_login.png")
-        await page.screenshot(path=ss3, full_page=True)
-        sess["screenshots"].append({"label": "After login", "file": f"manual_{session_id}_3_after_login.png"})
 
         # Go to Thanks page
         sess["log"].append("Navigating to airtel.in/thanks/...")
         await page.goto(AIRTEL_THANKS_URL, wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(4)
 
-        ss4 = os.path.join(DATA_DIR, f"manual_{session_id}_4_thanks.png")
-        await page.screenshot(path=ss4, full_page=True)
-        sess["screenshots"].append({"label": "Thanks page", "file": f"manual_{session_id}_4_thanks.png"})
 
         # Check for Duolingo
         page_text = await page.inner_text("body")
@@ -4603,7 +4556,7 @@ async def airtel_manual_submit_otp(request: Request):
         sess["log"].append(f"❌ Error: {str(e)[:200]}")
         sess["status"] = "error"
 
-    return {"status": sess["status"], "log": sess["log"], "screenshots": sess["screenshots"],
+    return {"status": sess["status"], "log": sess["log"],
             "has_duolingo": sess.get("has_duolingo", False)}
 
 
@@ -4616,7 +4569,6 @@ async def airtel_manual_status(session_id: str):
         "status": sess["status"],
         "otp": sess.get("otp"),
         "log": sess["log"],
-        "screenshots": sess["screenshots"],
         "has_duolingo": sess.get("has_duolingo"),
     }
 
