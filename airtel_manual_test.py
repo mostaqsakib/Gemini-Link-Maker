@@ -193,9 +193,13 @@ async def main():
             if otp:
                 print(f"🔔 OTP: {otp}")
             else:
-                otp = input("Enter OTP manually: ").strip()
+                otp = input("Enter OTP manually (or ENTER to skip): ").strip()
             if not otp:
-                print("❌ No OTP. Exiting.")
+                print("⏭ Skipping — no OTP.")
+                await browser.close()
+                again = input("\nTest another number? [y/n]: ").strip().lower()
+                if again == 'y':
+                    await main()
                 return
 
             # Fill OTP in browser
