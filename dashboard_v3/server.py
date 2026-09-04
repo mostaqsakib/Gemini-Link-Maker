@@ -3566,13 +3566,14 @@ async def get_airtel_browser():
             await state.airtel_pw.stop()
         except Exception:
             pass
+    headless = os.environ.get("AIRTEL_HEADLESS", "true").lower() != "false"
     state.airtel_pw = await async_playwright().start()
     state.airtel_browser = await state.airtel_pw.chromium.launch(
-        headless=True,
+        headless=headless,
         args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage",
               "--disable-gpu", "--single-process"],
     )
-    await emit_log("[Airtel] Browser launched", "info")
+    await emit_log(f"[Airtel] Browser launched (headless={headless})", "info")
     return state.airtel_browser
 
 def is_duolingo_link(url: str) -> bool:
