@@ -490,7 +490,7 @@ function initTabs() {
             if (btn.dataset.tab === 'display') renderProcessDisplay();
             if (btn.dataset.tab === 'links') loadSavedLinks();
             if (btn.dataset.tab === 'proxies') loadProxyList();
-            if (btn.dataset.tab === 'airtel') loadDuoLinks();
+            if (btn.dataset.tab === 'airtel') { loadDuoLinks(); loadAirtelScreenshots(); }
         });
     });
 }
@@ -2028,6 +2028,32 @@ function initAirtelBatch() {
 function airtelUpdateConcurrency() {
     const val = parseInt(document.getElementById('airtelConcurrency')?.value || '2');
     socket.emit('update_airtel_concurrency', { concurrency: val });
+}
+
+async function loadAirtelScreenshots() {
+    const container = document.getElementById('airtelScreenshots');
+    if (!container) return;
+    try {
+        const resp = await fetch('/api/airtel-screenshots', { cache: 'no-store' });
+        const data = await resp.json();
+        const phones = data.screenshots || [];
+        if (!phones.length) {
+            container.innerHTML = '<p style="color:#6c7086;font-size:12px;">No screenshots yet.</p>';
+            return;
+        }
+        container.innerHTML = phones.map(phone => `
+            <div style="text-align:center;">
+                <p style="font-size:11px;color:#a6adc8;margin:0 0 4px;">${phone}</p>
+                <a href="/api/airtel-screenshot/${phone}" target="_blank">
+                    <img src="/api/airtel-screenshot/${phone}?t=${Date.now()}"
+                        style="width:280px;border-radius:6px;border:1px solid #313244;cursor:pointer;"
+                        title="Click to open full size">
+                </a>
+            </div>
+        `).join('');
+    } catch(e) {
+        if (container) container.innerHTML = `<p style="color:#f38ba8;font-size:12px;">Error: ${e.message}</p>`;
+    }
 }
 
 // initAirtelBatch is called from the main DOMContentLoaded block above

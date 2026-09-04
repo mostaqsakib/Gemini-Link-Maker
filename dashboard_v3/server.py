@@ -3625,6 +3625,11 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
         await page.goto(AIRTEL_LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(3)
 
+        # Debug screenshot
+        ss_path = os.path.join(DATA_DIR, f"airtel_debug_{clean_phone}.png")
+        await page.screenshot(path=ss_path, full_page=True)
+        await emit_log(f"[Airtel/{clean_phone}] Screenshot saved → /api/airtel-screenshot/{clean_phone}", "info")
+
         # Debug: log page title and URL to confirm load
         page_title = await page.title()
         await emit_log(f"[Airtel/{clean_phone}] Page loaded: '{page_title}' at {page.url}", "info")
@@ -4123,8 +4128,18 @@ async def on_clear_airtel_links(sid, data=None):
     await sio.emit("airtel_links_data", {"links": [], "count": 0})
     await emit_log("[Airtel] Duolingo links cleared.", "info")
 
-@app.get("/api/airtel-links")
-async def api_get_airtel_links():
+@app.get("/api/airtel-screenshot/{phone}")
+async def get_airtel_screenshot(phone: str):
+    from fastapi.responses import FileResponse
+    ss_path = os.path.join(DATA_DIR, f"airtel_debug_{phone}.png")
+    if not os.path.exists(ss_path):
+        return Response(content="No screenshot yet", media_type="text/plain", status_code=404)
+    return FileResponse(ss_path, media_type="image/png")
+
+@app.get("/api/airtel-screenshots")
+async def list_airtel_screenshots():
+    files = [f for f in os.listdir(DATA_DIR) if f.startswith("airtel_debug_") and f.endswith(".png")]
+    return {"screenshots": [f.replace("airtel_debug_","").replace(".png","") for f in files]}
     links = config.get("saved_duolingo_links", [])
     return {"links": links, "count": len(links)}
 
