@@ -592,6 +592,8 @@ class State:
     airtel_batch_start_time = 0
     airtel_active_count = 0       # browsers currently open
     airtel_concurrency = 2        # live-updatable from UI
+    airtel_browser = None         # shared Playwright browser for Airtel
+    airtel_pw = None              # shared Playwright instance for Airtel
 
 state = State()
 
@@ -3553,6 +3555,26 @@ def init_airtel_csvs():
         with open(AIRTEL_FAILED_CSV, "w", newline="") as f:
             csv.writer(f).writerow(["Firebase URL", "Device ID", "Phone Number", "Reason", "OTP Wait Time (s)"])
 
+async def get_airtel_browser():
+    """Return shared Airtel browser, launching it if needed or if crashed."""
+    from playwright.async_api import async_playwright
+    if state.airtel_browser and state.airtel_browser.is_connected():
+        return state.airtel_browser
+    # Launch fresh
+    if state.airtel_pw:
+        try:
+            await state.airtel_pw.stop()
+        except Exception:
+            pass
+    state.airtel_pw = await async_playwright().start()
+    state.airtel_browser = await state.airtel_pw.chromium.launch(
+        headless=True,
+        args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage",
+              "--disable-gpu", "--single-process"],
+    )
+    await emit_log("[Airtel] Browser launched", "info")
+    return state.airtel_browser
+
 def is_duolingo_link(url: str) -> bool:
     return "duolingo.com/redeem" in url or ("duolingo.com" in url and "code=" in url)
 
@@ -3596,8 +3618,6 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
     await emit_order(order)
 
     context = None
-    pw_instance = None
-    browser_instance = None
     try:
         # ── Step 0: Firebase message snapshot ──────────────────────────────────
         known_msg_keys = await get_device_message_keys(fb_url, device_id)
@@ -3608,12 +3628,7 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
         order_event(order, "Opening Airtel login page...")
         await emit_order(order)
 
-        from playwright.async_api import async_playwright
-        pw_instance = await async_playwright().start()
-        browser_instance = await pw_instance.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-        )
+        browser_instance = await get_airtel_browser()
         context = await browser_instance.new_context(
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -3743,9 +3758,26 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
         order_event(order, "Entering OTP...")
         await emit_order(order)
 
+        # Screenshot before OTP entry
+        await page.screenshot(path=os.path.join(DATA_DIR, f"airtel_debug_{clean_phone}_otp_page.png"), full_page=True)
+
+        # Log all inputs and buttons on OTP page
+        otp_page_info = await page.evaluate("""
+            () => ({
+                inputs: Array.from(document.querySelectorAll('input')).map(i =>
+                    `type="${i.type}" maxlength="${i.maxLength}" placeholder="${i.placeholder}" id="${i.id}"`
+                ),
+                buttons: Array.from(document.querySelectorAll('button')).map(b =>
+                    `"${b.innerText.trim().substring(0,30)}" type="${b.type}"`
+                )
+            })
+        """)
+        await emit_log(f"[Airtel/{clean_phone}] OTP page inputs: {otp_page_info['inputs'][:5]}", "info")
+        await emit_log(f"[Airtel/{clean_phone}] OTP page buttons: {otp_page_info['buttons'][:5]}", "info")
+
         otp_input_sel = (
-            'input[type="tel"], input[type="number"], input[placeholder*="OTP"], '
-            'input[placeholder*="otp"], input[name*="otp"], input[id*="otp"], '
+            'input[type="tel"], input[type="number"], input[placeholder*="OTP" i], '
+            'input[placeholder*="otp" i], input[name*="otp" i], input[id*="otp" i], '
             'input[maxlength="6"], input[maxlength="4"]'
         )
 
@@ -3757,19 +3789,47 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
                 await otp_inputs[i].fill(digit)
                 await asyncio.sleep(0.1)
         else:
-            # Single field
             await page.locator(otp_input_sel).first.fill(otp_code)
 
         await asyncio.sleep(1)
 
-        # Click Submit / Verify / Login button
-        submit_sel = (
-            'button:has-text("Submit"), button:has-text("Verify"), '
-            'button:has-text("Login"), button:has-text("VERIFY"), '
-            'button:has-text("SUBMIT"), button[type="submit"]'
-        )
-        await page.locator(submit_sel).first.click()
+        # Click Submit — try each selector
+        submit_clicked = False
+        for sel in [
+            'button:has-text("Send OTP")',
+            'button:has-text("Verify")',
+            'button:has-text("VERIFY")',
+            'button:has-text("Submit")',
+            'button:has-text("SUBMIT")',
+            'button:has-text("Login")',
+            'button:has-text("LOGIN")',
+            'button:has-text("Continue")',
+            'button:has-text("Confirm")',
+            'button[type="submit"]',
+        ]:
+            try:
+                el = page.locator(sel).first
+                if await el.count() > 0:
+                    await el.wait_for(state="visible", timeout=5000)
+                    await el.click()
+                    submit_clicked = True
+                    await emit_log(f"[Airtel/{clean_phone}] Submit clicked with: {sel}", "info")
+                    break
+            except Exception:
+                continue
+
+        if not submit_clicked:
+            # Last resort: click first visible button
+            try:
+                await page.locator('button:visible').first.click()
+                submit_clicked = True
+                await emit_log(f"[Airtel/{clean_phone}] Submit: clicked first visible button", "warn")
+            except Exception as e:
+                await emit_log(f"[Airtel/{clean_phone}] ❌ No submit button found: {e}", "error")
+                raise Exception("Submit button not found")
+
         await asyncio.sleep(3)
+        await page.screenshot(path=os.path.join(DATA_DIR, f"airtel_debug_{clean_phone}_after_submit.png"), full_page=True)
         await emit_log(f"[Airtel/{clean_phone}] OTP submitted — logged in", "info")
 
         # ── Step 5: Navigate to Thanks page ───────────────────────────────────
@@ -3966,14 +4026,6 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
                 await context.close()
             except Exception:
                 pass
-        try:
-            await browser_instance.close()
-        except Exception:
-            pass
-        try:
-            await pw_instance.stop()
-        except Exception:
-            pass
         if order_id in state.orders:
             await asyncio.sleep(5)
             if order_id in state.orders:
@@ -4151,6 +4203,19 @@ async def on_stop_airtel_batch(sid, data=None):
     if state.airtel_batch_task:
         state.airtel_batch_task.cancel()
         state.airtel_batch_task = None
+    # Close shared browser
+    if state.airtel_browser:
+        try:
+            await state.airtel_browser.close()
+        except Exception:
+            pass
+        state.airtel_browser = None
+    if state.airtel_pw:
+        try:
+            await state.airtel_pw.stop()
+        except Exception:
+            pass
+        state.airtel_pw = None
     await emit_log("⏹ [Airtel] Batch stopped.", "warn")
     await sio.emit("airtel_batch_status", {"running": False})
 
