@@ -30,6 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initTabs();
     initModals();
     initMobileUI();
+    setTimeout(initAirtelBatch, 800);
 });
 
 //  Socket.IO 
@@ -2026,8 +2027,4 @@ function initAirtelBatch() {
     });
 }
 
-// Call init when DOM is ready (append to existing DOMContentLoaded flow)
-document.addEventListener('DOMContentLoaded', () => {
-    // Small delay so main initApp() runs first and socket is set up
-    setTimeout(initAirtelBatch, 500);
-});
+// initAirtelBatch is called from the main DOMContentLoaded block above

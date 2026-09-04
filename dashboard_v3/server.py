@@ -3587,20 +3587,25 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
     await emit_order(order)
 
     context = None
+    pw_instance = None
+    browser_instance = None
     try:
         # ── Step 0: Firebase message snapshot ──────────────────────────────────
         known_msg_keys = await get_device_message_keys(fb_url, device_id)
         await emit_log(f"[Airtel/{clean_phone}] Firebase snapshot: {len(known_msg_keys)} msgs", "info")
 
-        # ── Step 1: Launch Playwright browser ──────────────────────────────────
-        if not state.browser:
-            raise Exception("Playwright browser not running — start sniping first")
-
+        # ── Step 1: Launch own headless Playwright browser ────────────────────
         order["status"] = "logging_in"
         order_event(order, "Opening Airtel login page...")
         await emit_order(order)
 
-        context = await state.browser.new_context(
+        from playwright.async_api import async_playwright
+        pw_instance = await async_playwright().start()
+        browser_instance = await pw_instance.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+        )
+        context = await browser_instance.new_context(
             user_agent=(
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -3878,6 +3883,14 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
                 await context.close()
             except Exception:
                 pass
+        try:
+            await browser_instance.close()
+        except Exception:
+            pass
+        try:
+            await pw_instance.stop()
+        except Exception:
+            pass
         if order_id in state.orders:
             await asyncio.sleep(5)
             if order_id in state.orders:
@@ -3988,6 +4001,7 @@ async def airtel_batch_worker(concurrency: int = 2, delay: float = 8.0):
 
 @sio.on("start_airtel_batch")
 async def on_start_airtel_batch(sid, data=None):
+    await emit_log(f"[Airtel] start_airtel_batch received — data: {data}", "info")
     if state.airtel_batch_task and not state.airtel_batch_task.done():
         await emit_log("[Airtel] Batch already running.", "warn")
         return
