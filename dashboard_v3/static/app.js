@@ -1995,9 +1995,11 @@ function renderDuoLinks() {
 function airtelStart() {
     const concurrency = parseInt(document.getElementById('airtelConcurrency')?.value || '2');
     const delay       = parseFloat(document.getElementById('airtelDelay')?.value || '10');
-    console.log('[Airtel] emitting start_airtel_batch', { concurrency, delay });
-    socket.emit('start_airtel_batch', { concurrency, delay });
-    addLog(`🚀 Airtel Duolingo batch starting (concurrency=${concurrency}, delay=${delay}s)...`, 'info');
+    const provider    = document.getElementById('airtelProvider')?.value || '';
+    console.log('[Airtel] emitting start_airtel_batch', { concurrency, delay, provider });
+    socket.emit('start_airtel_batch', { concurrency, delay, provider });
+    const mode = provider ? `Provider: ${provider}` : 'Firebase Direct';
+    addLog(`🚀 Airtel batch starting — ${mode} (concurrency=${concurrency}, delay=${delay}s)`, 'info');
 }
 
 function airtelStop() {

@@ -202,6 +202,17 @@
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
                     <span>🦉 Duolingo Links: <strong id="duoLinkCount">0</strong></span>
                     <div style="display:flex;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap;">
+                        <label style="font-size:12px;">Mode:
+                            <select id="airtelProvider" style="padding:2px 6px;border-radius:4px;border:1px solid #333;background:#1e1e2e;color:#cdd6f4;font-size:12px;">
+                                <option value="">Firebase Direct</option>
+                                <option value="Grizzly">Grizzly</option>
+                                <option value="UOTP">UOTP</option>
+                                <option value="OTPSMS">OTP SMS</option>
+                                <option value="MeowSMS">MeowSMS</option>
+                                <option value="TigerSMS">Tiger SMS</option>
+                                <option value="OTPDoctor">OTP Doctor</option>
+                            </select>
+                        </label>
                         <label style="font-size:12px;">Concurrency:
                             <input id="airtelConcurrency" type="number" min="1" max="10" value="2"
                                 style="width:50px;padding:2px 4px;border-radius:4px;border:1px solid #333;background:#1e1e2e;color:#cdd6f4;">

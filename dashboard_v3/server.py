@@ -4060,13 +4060,321 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
                 await sio.emit("number_remove", {"id": order_id})
 
 
-async def airtel_batch_worker(concurrency: int = 2, delay: float = 8.0):
+async def process_airtel_duolingo_provider(p_name: str):
     """
-    Process Firebase devices for Airtel Duolingo — loops like Gemini sniper.
-    Waits for new Firebase DB from TG Monitor after each batch completes.
+    Provider mode: buy number from Grizzly/UOTP/etc → Airtel login → Duolingo.
+    OTP comes from provider API (get_otp_status) instead of Firebase.
     """
+    order_id = str(uuid.uuid4())[:8]
+    order = {
+        "id": order_id, "provider": f"Airtel/{p_name}", "status": "buying",
+        "otp": None, "phone": None, "aid": None, "timestamp": time.time(), "events": []
+    }
+    order_event(order, f"Buying Airtel number from {p_name}...")
+    await emit_order(order)
+
+    # ── Buy number ────────────────────────────────────────────────────────────
+    result = await buy_number(p_name)
+    if result.get("status") != "success":
+        await emit_log(f"[Airtel/{p_name}] ❌ Buy number failed", "error")
+        order["status"] = "cancelled"
+        await emit_order(order)
+        return
+
+    phone = result["phone"]
+    aid   = result["aid"]
+    order["phone"] = phone
+    order["aid"]   = aid
+    order["status"] = "waiting_otp"
+    order_event(order, f"Got number: {phone} (aid={aid})")
+    await emit_order(order)
+    await emit_log(f"[Airtel/{p_name}] 📱 +91{phone} — polling for OTP...", "info")
+
+    context = None
+    try:
+        # ── Launch browser + Airtel login ─────────────────────────────────────
+        browser_instance = await get_airtel_browser()
+        try:
+            context = await browser_instance.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                viewport={"width": 1280, "height": 800},
+            )
+        except Exception:
+            state.airtel_browser = None
+            browser_instance = await get_airtel_browser()
+            context = await browser_instance.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                viewport={"width": 1280, "height": 800},
+            )
+
+        page = await context.new_page()
+        state.airtel_active_count += 1
+
+        await page.goto(AIRTEL_LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
+        await asyncio.sleep(3)
+
+        # Fill phone
+        phone_filled = False
+        for sel in ['input[placeholder*="mobile" i]', 'input[type="tel"]',
+                    'input[maxlength="10"]', 'input[name*="mobile" i]']:
+            try:
+                el = page.locator(sel).first
+                if await el.count() > 0:
+                    await el.wait_for(state="visible", timeout=3000)
+                    await el.fill(phone)
+                    phone_filled = True; break
+            except Exception:
+                continue
+
+        if not phone_filled:
+            raise Exception("Phone input not found")
+
+        await asyncio.sleep(0.5)
+
+        # Click Send OTP
+        for sel in ['button:has-text("Send OTP")', 'button:has-text("SEND OTP")',
+                    'button:has-text("Get OTP")', 'button:has-text("GET OTP")',
+                    'button:has-text("Generate OTP")', 'button[type="submit"]']:
+            try:
+                el = page.locator(sel).first
+                if await el.count() > 0:
+                    await el.wait_for(state="visible", timeout=3000)
+                    await el.click()
+                    await emit_log(f"[Airtel/{p_name}] OTP requested for +91{phone}", "info")
+                    break
+            except Exception:
+                continue
+
+        # ── Poll OTP from provider ────────────────────────────────────────────
+        otp_code = None
+        start_time = time.time()
+        for attempt in range(60):
+            if time.time() - start_time > 180:
+                await cancel_api_number(p_name, aid)
+                raise Exception("3min OTP timeout — cancelled")
+
+            status = await get_otp_status(p_name, aid)
+            if status.startswith("STATUS_OK:"):
+                otp_text = status.split(":", 1)[1]
+                m = re.search(r'\b(\d{4,6})\b', otp_text)
+                otp_code = m.group(1) if m else otp_text.strip()
+                order["otp"] = otp_code
+                order["status"] = "otp_received"
+                order_event(order, f"OTP received: {otp_code}")
+                await emit_order(order)
+                await emit_log(f"✅ [Airtel/{p_name}] OTP: {otp_code}", "success")
+                break
+            elif "CANCEL" in status or "ERROR" in status:
+                raise Exception(f"Provider cancelled: {status}")
+            await asyncio.sleep(3)
+
+        if not otp_code:
+            await cancel_api_number(p_name, aid)
+            raise Exception("No OTP received")
+
+        # ── Enter OTP ─────────────────────────────────────────────────────────
+        otp_filled = False
+        for sel in ['input[placeholder*="OTP" i]', 'input[maxlength="4"]',
+                    'input[maxlength="6"]', 'input[type="number"]', 'input[type="tel"]']:
+            try:
+                inputs = await page.locator(sel).all()
+                if len(inputs) >= 4:
+                    for i, digit in enumerate(otp_code[:len(inputs)]):
+                        await inputs[i].fill(digit)
+                        await asyncio.sleep(0.1)
+                    otp_filled = True; break
+                elif inputs:
+                    await inputs[0].fill(otp_code)
+                    otp_filled = True; break
+            except Exception:
+                continue
+
+        if not otp_filled:
+            raise Exception("OTP input not found")
+
+        await asyncio.sleep(0.5)
+
+        # Click LOGIN
+        for sel in ['button:has-text("LOGIN")', 'button:has-text("Login")',
+                    'button:has-text("Verify")', 'button:has-text("VERIFY")',
+                    'button:has-text("Submit")', 'button:has-text("Continue")']:
+            try:
+                el = page.locator(sel).first
+                if await el.count() > 0:
+                    await el.wait_for(state="visible", timeout=5000)
+                    await el.click()
+                    break
+            except Exception:
+                continue
+
+        await asyncio.sleep(3)
+
+        # ── Thanks page ───────────────────────────────────────────────────────
+        order_event(order, "Navigating to Thanks page...")
+        await emit_order(order)
+        await page.goto(AIRTEL_THANKS_URL, wait_until="domcontentloaded", timeout=60000)
+        await asyncio.sleep(4)
+
+        # ── Check + Claim Duolingo ────────────────────────────────────────────
+        duolingo_found = False
+        for _ in range(20):
+            cards = await page.query_selector_all('div, section, article')
+            for card in cards:
+                card_text = (await card.inner_text()).lower()
+                if "duolingo" in card_text:
+                    claim_btn = await card.query_selector('text="Claim Now"')
+                    if claim_btn:
+                        await claim_btn.click()
+                        duolingo_found = True
+                        break
+            if duolingo_found:
+                break
+            claim_btns = await page.query_selector_all('text="Claim Now"')
+            if claim_btns:
+                await claim_btns[0].click()
+                duolingo_found = True
+                break
+            await asyncio.sleep(1)
+
+        if not duolingo_found:
+            await emit_log(f"ℹ️ [Airtel/{p_name}] +91{phone} — No Duolingo offer", "info")
+            order["status"] = "cancelled"
+            await emit_order(order)
+            with open(AIRTEL_FAILED_CSV, "a", newline="") as f:
+                csv.writer(f).writerow(["provider", p_name, phone, "No Duolingo offer", ""])
+            state.airtel_batch_checked += 1
+            await emit_airtel_batch_progress()
+            return
+
+        # ── PROCEED → capture Duolingo URL ───────────────────────────────────
+        await asyncio.sleep(3)
+        captured_urls = []
+
+        async def intercept_route(route):
+            if "duolingo.com" in route.request.url:
+                captured_urls.append(route.request.url)
+                try: await route.abort()
+                except Exception: pass
+            else:
+                try: await route.continue_()
+                except Exception: pass
+
+        await context.route("**/*", intercept_route)
+
+        async def on_new_page(new_page):
+            try:
+                await new_page.wait_for_load_state("domcontentloaded", timeout=15000)
+                if "duolingo.com" in new_page.url:
+                    captured_urls.append(new_page.url)
+                await new_page.close()
+            except Exception:
+                pass
+
+        context.on("page", on_new_page)
+
+        for sel in ['button:has-text("PROCEED")', 'button:has-text("Proceed")',
+                    'a:has-text("PROCEED")', 'a:has-text("Proceed")']:
+            try:
+                el = page.locator(sel).first
+                if await el.count() > 0:
+                    await el.wait_for(state="visible", timeout=20000)
+                    await el.click()
+                    break
+            except Exception:
+                continue
+
+        for _ in range(20):
+            if captured_urls:
+                break
+            await asyncio.sleep(1)
+
+        duolingo_url = next((u for u in captured_urls if is_duolingo_link(u)), None)
+        if not duolingo_url and is_duolingo_link(page.url):
+            duolingo_url = page.url
+
+        if not duolingo_url:
+            raise Exception("PROCEED clicked but Duolingo URL not captured")
+
+        # ── Save link ─────────────────────────────────────────────────────────
+        saved = config.get("saved_duolingo_links", [])
+        if duolingo_url not in saved:
+            saved.append(duolingo_url)
+            config["saved_duolingo_links"] = saved
+            save_config(config)
+        try:
+            with open(AIRTEL_LINKS_FILE, "a") as f:
+                f.write(duolingo_url + "\n")
+        except Exception:
+            pass
+
+        with open(AIRTEL_SUCCESS_CSV, "a", newline="") as f:
+            csv.writer(f).writerow(["provider", p_name, phone, duolingo_url, ""])
+
+        order["status"] = "logged_in"
+        order_event(order, "✅ Duolingo link saved!")
+        await emit_order(order)
+        await emit_log(f"🎉 [Airtel/{p_name}] Duolingo link saved! +91{phone}", "success")
+        await sio.emit("duolingo_link_saved", {
+            "phone": f"+91{phone}", "link": duolingo_url,
+            "count": len(config.get("saved_duolingo_links", []))
+        })
+        state.airtel_batch_checked += 1
+        await emit_airtel_batch_progress()
+
+    except Exception as e:
+        err = str(e)[:120]
+        await emit_log(f"❌ [Airtel/{p_name}] +91{phone} Error: {err}", "error")
+        order["status"] = "cancelled"
+        order_event(order, f"Error: {err}")
+        await emit_order(order)
+        with open(AIRTEL_FAILED_CSV, "a", newline="") as f:
+            csv.writer(f).writerow(["provider", p_name, phone, err, ""])
+        try:
+            await cancel_api_number(p_name, aid)
+        except Exception:
+            pass
+        state.airtel_batch_checked += 1
+        await emit_airtel_batch_progress()
+
+    finally:
+        state.airtel_active_count = max(0, state.airtel_active_count - 1)
+        if context:
+            try: await context.close()
+            except Exception: pass
+        if order_id in state.orders:
+            await asyncio.sleep(5)
+            if order_id in state.orders:
+                del state.orders[order_id]
+                await sio.emit("number_remove", {"id": order_id})
+
+
+async def airtel_batch_worker(concurrency: int = 2, delay: float = 8.0, provider: str = ""):
+    """Firebase Direct mode OR Provider mode (Grizzly/UOTP/etc)."""
     global _new_airtel_firebase_event
     init_airtel_csvs()
+
+    # ── Provider mode ─────────────────────────────────────────────────────────
+    if provider:
+        await emit_log(f"🚀 [Airtel] Provider mode: {provider}", "success")
+        semaphore = asyncio.Semaphore(concurrency)
+
+        async def run_provider_one():
+            async with semaphore:
+                if state.airtel_stop_event and state.airtel_stop_event.is_set():
+                    return
+                await process_airtel_duolingo_provider(provider)
+                await asyncio.sleep(delay)
+
+        while not (state.airtel_stop_event and state.airtel_stop_event.is_set()):
+            tasks = [asyncio.create_task(run_provider_one())
+                     for _ in range(state.airtel_concurrency)]
+            await asyncio.gather(*tasks, return_exceptions=True)
+            if state.airtel_stop_event and state.airtel_stop_event.is_set():
+                break
+        state.airtel_batch_task = None
+        return
+
+    # ── Firebase Direct mode ──────────────────────────────────────────────────
 
     while True:
         if state.airtel_stop_event and state.airtel_stop_event.is_set():
@@ -4230,10 +4538,12 @@ async def on_start_airtel_batch(sid, data=None):
         return
     concurrency = int((data or {}).get("concurrency", 2))
     delay = float((data or {}).get("delay", 8.0))
+    provider = str((data or {}).get("provider", "")).strip()
     state.airtel_concurrency = concurrency
     state.airtel_stop_event = asyncio.Event()
-    state.airtel_batch_task = asyncio.create_task(airtel_batch_worker(concurrency, delay))
-    await emit_log(f"🚀 [Airtel] Duolingo batch started (concurrency={concurrency}, delay={delay}s)", "success")
+    state.airtel_batch_task = asyncio.create_task(airtel_batch_worker(concurrency, delay, provider))
+    mode = f"Provider: {provider}" if provider else "Firebase Direct"
+    await emit_log(f"🚀 [Airtel] Batch started — {mode} (concurrency={concurrency}, delay={delay}s)", "success")
     await sio.emit("airtel_batch_status", {"running": True, "concurrency": concurrency})
 
 @sio.on("update_airtel_concurrency")
