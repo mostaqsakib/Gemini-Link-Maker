@@ -3923,12 +3923,14 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
         order_event(order, "Clicking PROCEED...")
         await emit_order(order)
 
-        captured_duolingo_url = []
+        captured_urls = []
 
+        # Setup intercept BEFORE clicking — catch any duolingo.com request
         async def intercept_route(route):
             req_url = route.request.url
             if "duolingo.com" in req_url:
-                captured_duolingo_url.append(req_url)
+                if req_url not in captured_urls:
+                    captured_urls.append(req_url)
                 try:
                     await route.abort()
                 except Exception:
@@ -3941,21 +3943,41 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
 
         await context.route("**/*", intercept_route)
 
-        # Also watch for new page/tab openings
-        new_tab_url = []
+        # Watch new tab — grab URL immediately on creation, don't wait for load
         async def on_new_page(new_page):
             try:
-                await new_page.wait_for_load_state("domcontentloaded", timeout=15000)
+                # Grab URL right away before any redirect
                 url = new_page.url
-                if "duolingo.com" in url:
-                    new_tab_url.append(url)
-                await new_page.close()
+                if url and "duolingo.com" in url and url not in captured_urls:
+                    captured_urls.append(url)
+                # Also listen for navigations inside the new tab
+                async def on_nav(frame):
+                    nav_url = frame.url
+                    if nav_url and "duolingo.com" in nav_url and nav_url not in captured_urls:
+                        captured_urls.append(nav_url)
+                new_page.on("framenavigated", on_nav)
+                # Give it a moment then close
+                await asyncio.sleep(2)
+                url2 = new_page.url
+                if url2 and "duolingo.com" in url2 and url2 not in captured_urls:
+                    captured_urls.append(url2)
+                try:
+                    await new_page.close()
+                except Exception:
+                    pass
             except Exception:
                 pass
 
         context.on("page", on_new_page)
 
-        # Find and click the PROCEED button on /thanks/subscription-claim
+        # Also watch current page navigations
+        async def on_frame_nav(frame):
+            nav_url = frame.url
+            if nav_url and "duolingo.com" in nav_url and nav_url not in captured_urls:
+                captured_urls.append(nav_url)
+        page.on("framenavigated", on_frame_nav)
+
+        # Click PROCEED
         proceed_sel = (
             'button:has-text("PROCEED"), button:has-text("Proceed"), '
             'a:has-text("PROCEED"), a:has-text("Proceed"), '
@@ -3965,20 +3987,25 @@ async def process_airtel_duolingo(device_id: str, phone: str, fb_url: str):
             await page.locator(proceed_sel).first.wait_for(state="visible", timeout=20000)
             await page.locator(proceed_sel).first.click()
         except Exception:
-            # Fallback: try clicking the button by role
-            await page.get_by_role("button", name=re.compile(r"proceed", re.IGNORECASE)).first.click()
+            try:
+                await page.get_by_role("button", name=re.compile(r"proceed", re.IGNORECASE)).first.click()
+            except Exception:
+                pass
 
-        # Wait for URL to be captured (via route intercept or new tab)
-        for _ in range(20):
-            if captured_duolingo_url or new_tab_url:
+        # Wait up to 30s for URL capture
+        for _ in range(30):
+            if any(is_duolingo_link(u) for u in captured_urls):
+                break
+            # Also check current page URL
+            curr = page.url
+            if is_duolingo_link(curr) and curr not in captured_urls:
+                captured_urls.append(curr)
                 break
             await asyncio.sleep(1)
 
-        # Combine all captured URLs
-        all_caught = captured_duolingo_url + new_tab_url
-        duolingo_url = next((u for u in all_caught if is_duolingo_link(u)), None)
+        duolingo_url = next((u for u in captured_urls if is_duolingo_link(u)), None)
 
-        # Fallback: check current page URL
+        # Final fallback: check current page
         if not duolingo_url:
             curr_url = page.url
             if is_duolingo_link(curr_url):
@@ -4348,9 +4375,12 @@ async def process_airtel_duolingo_provider(p_name: str):
         await asyncio.sleep(3)
         captured_urls = []
 
+        # Intercept BEFORE click
         async def intercept_route(route):
-            if "duolingo.com" in route.request.url:
-                captured_urls.append(route.request.url)
+            req_url = route.request.url
+            if "duolingo.com" in req_url:
+                if req_url not in captured_urls:
+                    captured_urls.append(req_url)
                 try: await route.abort()
                 except Exception: pass
             else:
@@ -4361,14 +4391,30 @@ async def process_airtel_duolingo_provider(p_name: str):
 
         async def on_new_page(new_page):
             try:
-                await new_page.wait_for_load_state("domcontentloaded", timeout=15000)
-                if "duolingo.com" in new_page.url:
-                    captured_urls.append(new_page.url)
-                await new_page.close()
+                url = new_page.url
+                if url and "duolingo.com" in url and url not in captured_urls:
+                    captured_urls.append(url)
+                async def on_nav(frame):
+                    nav_url = frame.url
+                    if nav_url and "duolingo.com" in nav_url and nav_url not in captured_urls:
+                        captured_urls.append(nav_url)
+                new_page.on("framenavigated", on_nav)
+                await asyncio.sleep(2)
+                url2 = new_page.url
+                if url2 and "duolingo.com" in url2 and url2 not in captured_urls:
+                    captured_urls.append(url2)
+                try: await new_page.close()
+                except Exception: pass
             except Exception:
                 pass
 
         context.on("page", on_new_page)
+
+        async def on_frame_nav(frame):
+            nav_url = frame.url
+            if nav_url and "duolingo.com" in nav_url and nav_url not in captured_urls:
+                captured_urls.append(nav_url)
+        page.on("framenavigated", on_frame_nav)
 
         for sel in ['button:has-text("PROCEED")', 'button:has-text("Proceed")',
                     'a:has-text("PROCEED")', 'a:has-text("Proceed")']:
@@ -4381,8 +4427,13 @@ async def process_airtel_duolingo_provider(p_name: str):
             except Exception:
                 continue
 
-        for _ in range(20):
-            if captured_urls:
+        # Wait up to 30s
+        for _ in range(30):
+            if any(is_duolingo_link(u) for u in captured_urls):
+                break
+            curr = page.url
+            if is_duolingo_link(curr) and curr not in captured_urls:
+                captured_urls.append(curr)
                 break
             await asyncio.sleep(1)
 
