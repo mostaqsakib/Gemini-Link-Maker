@@ -3313,10 +3313,11 @@ async def tg_add_firebase_dbs(new_dbs: list):
         await sio.emit("firebase_dbs_updated", {"added": added})
         # Wake up waiting Gemini sniper immediately
         _new_firebase_event.set()
-        if not state.is_sniping:
+        airtel_running = state.airtel_batch_task and not state.airtel_batch_task.done()
+        if not state.is_sniping and not airtel_running:
             await emit_log("🚀 TG Monitor: Auto-starting sniper...", "info")
             await sio.emit("auto_start_sniper")
-        else:
+        elif state.is_sniping:
             await emit_log("🔄 TG Monitor: Sniper waking up with new DB...", "info")
         # Wake up Airtel batch if running
         _new_airtel_firebase_event.set()

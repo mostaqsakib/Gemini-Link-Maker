@@ -1740,7 +1740,9 @@ function initTgMonitor() {
         // Click start button after short delay to let config save
         setTimeout(() => {
             const startBtn = document.getElementById('startBtn');
-            if (startBtn && !startBtn.classList.contains('hidden')) {
+            const airtelRunning = document.getElementById('stopAirtelBatch') &&
+                                  !document.getElementById('startAirtelBatch')?.disabled === false;
+            if (startBtn && !startBtn.classList.contains('hidden') && !airtelRunning) {
                 startBtn.click();
             }
         }, 2000);
