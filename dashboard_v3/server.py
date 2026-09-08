@@ -4104,58 +4104,79 @@ async def process_airtel_duolingo_provider(p_name: str):
 
     context = None
     try:
-        # ── Launch browser + Airtel login ─────────────────────────────────────
-        browser_instance = await get_airtel_browser()
-        try:
-            context = await browser_instance.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                viewport={"width": 1280, "height": 800},
-            )
-        except Exception:
-            state.airtel_browser = None
+        # ── Trigger OTP via Airtel API (no browser needed) ────────────────────
+        airtel_headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "Origin": "https://www.airtel.in",
+            "Referer": "https://www.airtel.in/manage-account/login",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "X-Requested-With": "XMLHttpRequest",
+        }
+        otp_sent_via_api = False
+
+        # Try multiple known Airtel OTP endpoints
+        for otp_url, payload in [
+            (AIRTEL_SEND_OTP_URL,
+             {"mobileNumber": phone, "loginFlowType": "MOBILE", "alternateNumber": ""}),
+            ("https://www.airtel.in/wynk/api/user/login/initiate",
+             {"mobileNumber": phone, "countryCode": "+91"}),
+            ("https://www.airtel.in/manage-account/api/v2/login/sendOtp",
+             {"mobileNumber": phone}),
+        ]:
+            try:
+                async with state.http_session.post(
+                    otp_url, json=payload, headers=airtel_headers, timeout=15
+                ) as resp:
+                    resp_text = await resp.text()
+                    await emit_log(f"[Airtel/{p_name}] OTP API {resp.status}: {resp_text[:80]}", "info")
+                    if resp.status in (200, 201):
+                        otp_sent_via_api = True
+                        break
+            except Exception as e:
+                await emit_log(f"[Airtel/{p_name}] OTP API error: {e}", "warn")
+                continue
+
+        if not otp_sent_via_api:
+            # Fallback: browser
+            await emit_log(f"[Airtel/{p_name}] API failed — using browser fallback", "warn")
             browser_instance = await get_airtel_browser()
-            context = await browser_instance.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-                viewport={"width": 1280, "height": 800},
-            )
-
-        page = await context.new_page()
-        state.airtel_active_count += 1
-
-        await page.goto(AIRTEL_LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
-        await asyncio.sleep(3)
-
-        # Fill phone
-        phone_filled = False
-        for sel in ['input[placeholder*="mobile" i]', 'input[type="tel"]',
-                    'input[maxlength="10"]', 'input[name*="mobile" i]']:
             try:
-                el = page.locator(sel).first
-                if await el.count() > 0:
-                    await el.wait_for(state="visible", timeout=3000)
-                    await el.fill(phone)
-                    phone_filled = True; break
+                context = await browser_instance.new_context(
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                    viewport={"width": 1280, "height": 800},
+                )
             except Exception:
-                continue
-
-        if not phone_filled:
-            raise Exception("Phone input not found")
-
-        await asyncio.sleep(0.5)
-
-        # Click Send OTP
-        for sel in ['button:has-text("Send OTP")', 'button:has-text("SEND OTP")',
-                    'button:has-text("Get OTP")', 'button:has-text("GET OTP")',
-                    'button:has-text("Generate OTP")', 'button[type="submit"]']:
-            try:
-                el = page.locator(sel).first
-                if await el.count() > 0:
-                    await el.wait_for(state="visible", timeout=3000)
-                    await el.click()
-                    await emit_log(f"[Airtel/{p_name}] OTP requested for +91{phone}", "info")
-                    break
-            except Exception:
-                continue
+                state.airtel_browser = None
+                browser_instance = await get_airtel_browser()
+                context = await browser_instance.new_context(
+                    user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                    viewport={"width": 1280, "height": 800},
+                )
+            page_login = await context.new_page()
+            await page_login.goto(AIRTEL_LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
+            await asyncio.sleep(3)
+            for sel in ['input[placeholder*="mobile" i]', 'input[type="tel"]', 'input[maxlength="10"]']:
+                try:
+                    el = page_login.locator(sel).first
+                    if await el.count() > 0:
+                        await el.wait_for(state="visible", timeout=3000)
+                        await el.fill(phone)
+                        break
+                except Exception:
+                    continue
+            await asyncio.sleep(0.5)
+            for sel in ['button:has-text("Send OTP")', 'button:has-text("Get OTP")', 'button[type="submit"]']:
+                try:
+                    el = page_login.locator(sel).first
+                    if await el.count() > 0:
+                        await el.click()
+                        await emit_log(f"[Airtel/{p_name}] OTP requested via browser", "info")
+                        break
+                except Exception:
+                    continue
+            await asyncio.sleep(2)
+            await page_login.close()
 
         # ── Poll OTP from provider ────────────────────────────────────────────
         otp_code = None
@@ -4184,42 +4205,107 @@ async def process_airtel_duolingo_provider(p_name: str):
             await cancel_api_number(p_name, aid)
             raise Exception("No OTP received")
 
-        # ── Enter OTP ─────────────────────────────────────────────────────────
-        otp_filled = False
-        for sel in ['input[placeholder*="OTP" i]', 'input[maxlength="4"]',
-                    'input[maxlength="6"]', 'input[type="number"]', 'input[type="tel"]']:
+        # ── Verify OTP via API first, fallback to browser ────────────────────
+        verified_via_api = False
+        session_cookies = {}
+
+        for verify_url, v_payload in [
+            (AIRTEL_VERIFY_OTP_URL,
+             {"mobileNumber": phone, "otp": otp_code, "loginFlowType": "MOBILE"}),
+            ("https://www.airtel.in/wynk/api/user/login/verify",
+             {"mobileNumber": phone, "otp": otp_code, "countryCode": "+91"}),
+            ("https://www.airtel.in/manage-account/api/v2/login/verifyOtp",
+             {"mobileNumber": phone, "otp": otp_code}),
+        ]:
             try:
-                inputs = await page.locator(sel).all()
-                if len(inputs) >= 4:
-                    for i, digit in enumerate(otp_code[:len(inputs)]):
-                        await inputs[i].fill(digit)
-                        await asyncio.sleep(0.1)
-                    otp_filled = True; break
-                elif inputs:
-                    await inputs[0].fill(otp_code)
-                    otp_filled = True; break
-            except Exception:
+                async with state.http_session.post(
+                    verify_url, json=v_payload, headers=airtel_headers, timeout=15
+                ) as resp:
+                    resp_text = await resp.text()
+                    await emit_log(f"[Airtel/{p_name}] Verify API {resp.status}: {resp_text[:80]}", "info")
+                    if resp.status in (200, 201):
+                        # Save cookies for subsequent requests
+                        for cookie in resp.cookies:
+                            session_cookies[cookie.key] = cookie.value
+                        verified_via_api = True
+                        break
+            except Exception as e:
+                await emit_log(f"[Airtel/{p_name}] Verify API error: {e}", "warn")
                 continue
 
-        if not otp_filled:
-            raise Exception("OTP input not found")
+        # ── Open browser for Thanks page (with session if API worked) ─────────
+        browser_instance = await get_airtel_browser()
+        try:
+            context = await browser_instance.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                viewport={"width": 1280, "height": 800},
+            )
+        except Exception:
+            state.airtel_browser = None
+            browser_instance = await get_airtel_browser()
+            context = await browser_instance.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+                viewport={"width": 1280, "height": 800},
+            )
 
-        await asyncio.sleep(0.5)
+        # Inject cookies if API verified successfully
+        if verified_via_api and session_cookies:
+            await context.add_cookies([
+                {"name": k, "value": v, "domain": ".airtel.in", "path": "/"}
+                for k, v in session_cookies.items()
+            ])
+            await emit_log(f"[Airtel/{p_name}] Session cookies injected", "info")
 
-        # Click LOGIN
-        for sel in ['button:has-text("LOGIN")', 'button:has-text("Login")',
-                    'button:has-text("Verify")', 'button:has-text("VERIFY")',
-                    'button:has-text("Submit")', 'button:has-text("Continue")']:
-            try:
-                el = page.locator(sel).first
-                if await el.count() > 0:
-                    await el.wait_for(state="visible", timeout=5000)
-                    await el.click()
-                    break
-            except Exception:
-                continue
+        page = await context.new_page()
+        state.airtel_active_count += 1
 
-        await asyncio.sleep(3)
+        if not verified_via_api:
+            # Full browser login flow
+            await page.goto(AIRTEL_LOGIN_URL, wait_until="domcontentloaded", timeout=60000)
+            await asyncio.sleep(3)
+            for sel in ['input[placeholder*="mobile" i]', 'input[type="tel"]', 'input[maxlength="10"]']:
+                try:
+                    el = page.locator(sel).first
+                    if await el.count() > 0:
+                        await el.wait_for(state="visible", timeout=3000)
+                        await el.fill(phone)
+                        break
+                except Exception:
+                    continue
+            await asyncio.sleep(0.5)
+            for sel in ['button:has-text("Send OTP")', 'button:has-text("Get OTP")', 'button[type="submit"]']:
+                try:
+                    el = page.locator(sel).first
+                    if await el.count() > 0:
+                        await el.click()
+                        break
+                except Exception:
+                    continue
+            await asyncio.sleep(3)
+            # Enter OTP in browser
+            for sel in ['input[placeholder*="OTP" i]', 'input[maxlength="4"]', 'input[maxlength="6"]']:
+                try:
+                    inputs = await page.locator(sel).all()
+                    if len(inputs) >= 4:
+                        for i, digit in enumerate(otp_code[:len(inputs)]):
+                            await inputs[i].fill(digit)
+                            await asyncio.sleep(0.1)
+                        break
+                    elif inputs:
+                        await inputs[0].fill(otp_code)
+                        break
+                except Exception:
+                    continue
+            await asyncio.sleep(0.5)
+            for sel in ['button:has-text("LOGIN")', 'button:has-text("Verify")', 'button:has-text("Submit")']:
+                try:
+                    el = page.locator(sel).first
+                    if await el.count() > 0:
+                        await el.click()
+                        break
+                except Exception:
+                    continue
+            await asyncio.sleep(3)
 
         # ── Thanks page ───────────────────────────────────────────────────────
         order_event(order, "Navigating to Thanks page...")
