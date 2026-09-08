@@ -3559,34 +3559,46 @@ def init_airtel_csvs():
         with open(AIRTEL_FAILED_CSV, "w", newline="") as f:
             csv.writer(f).writerow(["Firebase URL", "Device ID", "Phone Number", "Reason", "OTP Wait Time (s)"])
 
+_airtel_browser_lock = None
+
+def _get_airtel_browser_lock():
+    global _airtel_browser_lock
+    if _airtel_browser_lock is None:
+        _airtel_browser_lock = asyncio.Lock()
+    return _airtel_browser_lock
+
 async def get_airtel_browser():
-    """Return shared Airtel browser, launching it if needed or if crashed."""
-    from playwright.async_api import async_playwright
+    """Return shared Airtel browser, launching if needed. Lock prevents concurrent launches."""
+    # Fast path
     if state.airtel_browser and state.airtel_browser.is_connected():
         return state.airtel_browser
-    # Launch fresh
-    if state.airtel_pw:
-        try:
-            await state.airtel_pw.stop()
-        except Exception:
-            pass
-    headless = os.environ.get("AIRTEL_HEADLESS", "true").lower() != "false"
-    state.airtel_pw = await async_playwright().start()
-    state.airtel_browser = await state.airtel_pw.chromium.launch(
-        headless=headless,
-        args=[
-            "--no-sandbox",
-            "--disable-setuid-sandbox",
-            "--disable-dev-shm-usage",
-            "--disable-gpu",
-            "--disable-software-rasterizer",
-            "--disable-extensions",
-            "--no-first-run",
-            "--no-zygote",
-        ],
-    )
-    await emit_log(f"[Airtel] Browser launched (headless={headless})", "info")
-    return state.airtel_browser
+    # Slow path — serialize
+    async with _get_airtel_browser_lock():
+        if state.airtel_browser and state.airtel_browser.is_connected():
+            return state.airtel_browser
+        from playwright.async_api import async_playwright
+        if state.airtel_pw:
+            try:
+                await state.airtel_pw.stop()
+            except Exception:
+                pass
+        headless = os.environ.get("AIRTEL_HEADLESS", "true").lower() != "false"
+        state.airtel_pw = await async_playwright().start()
+        state.airtel_browser = await state.airtel_pw.chromium.launch(
+            headless=headless,
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-software-rasterizer",
+                "--disable-extensions",
+                "--no-first-run",
+                "--no-zygote",
+            ],
+        )
+        await emit_log(f"[Airtel] Browser launched (headless={headless})", "info")
+        return state.airtel_browser
 
 def is_duolingo_link(url: str) -> bool:
     return "duolingo.com/redeem" in url or ("duolingo.com" in url and "code=" in url)
